@@ -76,10 +76,10 @@ def transform_scale(scale, trans, pos):
     return result
 
 if __name__ == "__main__":
-    scene = 'Car'
-    file_path1 = f'../data/Jrender_Dataset/{scene}/transforms_train.json'
+    scene = 'Easyship'
+    file_path1 = f'../data/Jrender_Dataset/{scene}/transforms_train_ori.json'
     file_path2 = f'../data/Jrender_Dataset/{scene}/transforms_train_ngp.json'
-    file_path3 = f'../data/Jrender_Dataset/{scene}/transforms_test.json'
+    file_path3 = f'../data/Jrender_Dataset/{scene}/transforms_B_test_ori.json'
     with open(file_path1,'r')as f:
         data1=json.load(f)
     with open(file_path2,'r')as f:
@@ -119,6 +119,7 @@ if __name__ == "__main__":
         color_test.append([1., 1., 0.])
         color_test_fix.append([1., 0., 1.])
         min_dist = np.linalg.norm(matrix1 - data_trans[0])
+        delta2_t = delta_t = gt[0] - data_trans[0]
         min_dist2 = min_dist * 2
         for dt, g in zip(data_trans, gt):
             d = np.linalg.norm(matrix1 - dt)
@@ -156,15 +157,18 @@ if __name__ == "__main__":
         lines.points = o3d.utility.Vector3dVector(np.concatenate((data_trans, gt), axis=0))
         o3d.visualization.draw_geometries([pcd, pcd2, pcd3, pcd4, lines])
     else:
-        file_path_vals = [f'../data/Jrender_Dataset/{scene}/transforms_val',
-                          f'../data/Jrender_Dataset/{scene}/transforms_test']
+        # file_path_vals = [f'../data/Jrender_Dataset/{scene}/transforms_val',
+        #                   f'../data/Jrender_Dataset/{scene}/transforms_test']
+        file_path_vals = [f'../data/Jrender_Dataset/{scene}/transforms_B_test']
         for file_path_val in file_path_vals:
-            with open(file_path_val + '.json','r')as f:
+            with open(file_path_val + '_ori.json','r')as f:
                 data_val=json.load(f)
             for frame in data_val['frames']:
                 matrix = transform_scale(scale, avg_trans, matrix_nerf2ngp(np.array(frame['transform_matrix'], np.float32)))
                 m_trans = matrix[0:3, 3:4]
 
+                delta2_t = delta_t = gt[0] - data_trans[0]
+                delta2_r = delta_r = gt_m[0][0:3, 0:3] @ np.linalg.inv(data_trans_m[0][0:3, 0:3])
                 min_dist = np.linalg.norm(m_trans - data_trans[0])
                 min_dist2 = min_dist * 2
                 for dt, g in zip(data_trans_m, gt_m):

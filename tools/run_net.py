@@ -47,7 +47,7 @@ def main():
     args = parser.parse_args()
 
     assert args.type in ["novel_view","mesh"],f"{args.type} not support, please choose [novel_view, mesh]"
-    assert args.task in ["train","test","render","validate_mesh","val_all","gui"],f"{args.task} not support, please choose [train, test, render, validate_mesh, val_all, gui]"
+    assert args.task in ["train","test","B_test","render","validate_mesh","val_all","gui"],f"{args.task} not support, please choose [train, test, B_test, render, validate_mesh, val_all, gui]"
     
     if args.task == 'validate_mesh':
         is_continue = True
@@ -66,6 +66,8 @@ def main():
         runner.train()
     elif args.task == "test":
         runner.test(True)
+    elif args.task == "B_test":
+        runner.test(True, True)
     elif args.task == "render":
         runner.render(True, args.save_dir)
     elif args.task == "val_all":

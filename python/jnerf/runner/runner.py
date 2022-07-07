@@ -101,9 +101,12 @@ class Runner():
         self.val_all()
         # self.test()
 
-    def test(self, load_ckpt=False):
+    def test(self, load_ckpt=False, B_test=False):
         if self.dataset["test"] is None:
-            self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
+            if B_test:
+                self.dataset["test"] = build_from_cfg(self.cfg.dataset.B_test, DATASETS)
+            else:
+                self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
             if self.cfg.dataset_obj is None:
                 self.cfg.dataset_obj = self.dataset["test"]
                 self.build_model()
@@ -113,9 +116,10 @@ class Runner():
         if load_ckpt:
             assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
             self.load_ckpt(self.ckpt_path)
-        if not os.path.exists(os.path.join(self.save_path, "test")):
-            os.makedirs(os.path.join(self.save_path, "test"))
-        mse_list=self.render_test(save_path=os.path.join(self.save_path, "test"))
+        save_path_back = "B_test" if B_test else "test"
+        if not os.path.exists(os.path.join(self.save_path, save_path_back)):
+            os.makedirs(os.path.join(self.save_path, save_path_back))
+        mse_list=self.render_test(save_path=os.path.join(self.save_path, save_path_back))
         if self.dataset["test"].have_img:
             tot_psnr=0
             for mse in mse_list:
@@ -277,6 +281,8 @@ class Runner():
             rgb,alpha = self.sampler.rays2rgb(network_outputs, inference=True)
             imgs[pixel:end] = rgb.numpy()
             alphas[pixel:end] = alpha.numpy()
+            jt.sync_all()
+            jt.gc()
         imgs = imgs[:H*W].reshape(H, W, 3)
         alphas = alphas[:H*W].reshape(H, W, 1)
         imgs_tar=jt.array(self.dataset[dataset_mode].image_data[img_id]).reshape(H, W, 4)
@@ -285,6 +291,7 @@ class Runner():
         if not self.alpha_image:
             imgs = imgs + np.array(self.background_color)*(1-alphas)
             alphas = None
+        jt.sync_all()
         jt.gc()
         return imgs, alphas, imgs_tar
 

@@ -42,7 +42,7 @@ class NerfDataset():
         self.to_jt=to_jt
         self.have_img=have_img
         self.compacted_img_data=[]# img_id ,rgba,ray_d,ray_o
-        assert mode=="train" or mode=="val" or mode=="test"
+        assert mode=="train" or mode=="val" or mode=="test" or mode=="B_test"
         self.mode=mode
         self.idx_now=0
         self.load_data()

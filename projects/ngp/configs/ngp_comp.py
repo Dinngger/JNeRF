@@ -37,7 +37,7 @@ expdecay=dict(
     decay_end=None
 )
 
-exp_name = "Easyship"
+exp_name = "Scarf"
 dataset_type = 'NerfDataset'
 dataset_dir = 'data/Jrender_Dataset/'+exp_name
 dataset_aabb = {"Car":4, "Coffee":1, "Easyship":8, "Scar":5, "Scarf":8}
@@ -80,13 +80,27 @@ dataset = dict(
         scale=dataset_scale[exp_name],
         offset=dataset_offset[exp_name],
     ),
+    B_test=dict(
+        type=dataset_type,
+        root_dir=dataset_dir,
+        correct_pose=[-1,-1,1],
+        batch_size=4096,
+        mode='B_test',
+        have_img=False,
+        H=800,
+        W=800,
+        preload_shuffle=False,
+        aabb_scale=dataset_aabb[exp_name],
+        scale=dataset_scale[exp_name],
+        offset=dataset_offset[exp_name],
+    ),
 )
 
 log_dir = "./logs"
 load_ckpt = False
 tot_train_steps = 40000
 # Background color, value range from 0 to 1
-background_color = [1, 1, 1]
+background_color = [0, 0, 0] if exp_name == "Scarf" else [1, 1, 1]
 # Hash encoding function used in Instant-NGP
 hash_func = "p0 ^ p1 * 19349663 ^ p2 * 83492791"
 cone_angle_constant = 0.00390625

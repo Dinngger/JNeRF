@@ -3,8 +3,8 @@ import json
 import argparse
 import numpy as np
 
-scenes = ["Car", "Coffee", "Easyship", "Scar", "Scarf"]
-backs = ["train", "test", "val"]
+scenes = ["Car", "Easyship"]
+backs = ["B_test"]
 correct_pose = [-1,1,-1]
 
 def matrix_nerf2ngp(matrix):
