@@ -191,6 +191,14 @@ class Runner():
         if self.dataset["val"] is None:
             if self.cfg.dataset.val:
                 self.dataset["val"] = build_from_cfg(self.cfg.dataset.val, DATASETS)
+                if self.cfg.dataset_obj is None:
+                    self.cfg.dataset_obj = self.dataset["val"]
+                    self.build_model()
+                    self.image_resolutions = self.dataset["val"].resolution
+                    self.W = self.image_resolutions[0]
+                    self.H = self.image_resolutions[1]
+                    assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
+                    self.load_ckpt(self.ckpt_path)
             else:
                 print('no val dateset!')
                 return
