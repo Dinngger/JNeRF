@@ -20,4 +20,4 @@
 ### 
 export PYTHONPATH=$PYTHONPATH:./python
 unset LD_LIBRARY_PATH
-python tools/run_net.py --config-file ./projects/ngp/configs/ngp_comp.py
+python tools/run_net.py --config-file ./projects/ngp/configs/ngp_comp.py --task gui

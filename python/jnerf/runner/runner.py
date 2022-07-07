@@ -1,3 +1,5 @@
+from cmath import pi
+from math import fmod, cos, sin
 import os
 import time
 import jittor as jt
@@ -11,6 +13,7 @@ from jnerf.utils.registry import build_from_cfg,NETWORKS,SCHEDULERS,DATASETS,OPT
 from jnerf.models.losses.mse_loss import img2mse, mse2psnr
 from jnerf.dataset import camera_path
 import cv2
+import dearpygui.dearpygui as dpg
 
 class Runner():
     def __init__(self):
@@ -22,10 +25,12 @@ class Runner():
             os.makedirs(self.cfg.log_dir)
         self.exp_name           = self.cfg.exp_name
         self.dataset            = {}
-        self.dataset["train"]   = build_from_cfg(self.cfg.dataset.train, DATASETS)
-        self.cfg.dataset_obj    = self.dataset["train"]
+        self.cfg.dataset_obj    = None
+        self.dataset["train"]   = None
         self.dataset["val"]     = None
         self.dataset["test"]    = None
+    
+    def build_model(self):
         self.model              = build_from_cfg(self.cfg.model, NETWORKS)
         self.cfg.model_obj      = self.model
         self.sampler            = build_from_cfg(self.cfg.sampler, SAMPLERS)
@@ -53,11 +58,16 @@ class Runner():
 
         self.cfg.m_training_step = 0
         self.val_freq = 4096
-        self.image_resolutions = self.dataset["train"].resolution
-        self.W = self.image_resolutions[0]
-        self.H = self.image_resolutions[1]
 
     def train(self):
+        if self.dataset["train"] is None:
+            self.dataset["train"]   = build_from_cfg(self.cfg.dataset.train, DATASETS)
+            if self.cfg.dataset_obj is None:
+                self.cfg.dataset_obj = self.dataset["train"]
+                self.build_model()
+            self.image_resolutions = self.dataset["train"].resolution
+            self.W = self.image_resolutions[0]
+            self.H = self.image_resolutions[1]
         old_training_step = self.start
         tqdm_last_update = time.monotonic()
         with tqdm(desc="Training", total=self.tot_train_steps, unit="step", initial=self.start) as t:
@@ -92,11 +102,17 @@ class Runner():
         # self.test()
 
     def test(self, load_ckpt=False):
+        if self.dataset["test"] is None:
+            self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
+            if self.cfg.dataset_obj is None:
+                self.cfg.dataset_obj = self.dataset["test"]
+                self.build_model()
+            self.image_resolutions = self.dataset["test"].resolution
+            self.W = self.image_resolutions[0]
+            self.H = self.image_resolutions[1]
         if load_ckpt:
             assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
             self.load_ckpt(self.ckpt_path)
-        if self.dataset["test"] is None:
-            self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
         if not os.path.exists(os.path.join(self.save_path, "test")):
             os.makedirs(os.path.join(self.save_path, "test"))
         mse_list=self.render_test(save_path=os.path.join(self.save_path, "test"))
@@ -272,13 +288,13 @@ class Runner():
         jt.gc()
         return imgs, alphas, imgs_tar
 
-    def render_img_with_pose(self, pose):
+    def render_img_with_pose(self, pose, dataset_mode="train"):
         W, H = self.image_resolutions
         H = int(H)
         W = int(W)
         fake_img_ids = jt.zeros([H*W], 'int32')
-        rays_o_total, rays_d_total = self.dataset["train"].generate_rays_with_pose(pose, W, H)
-        img = np.empty([H*W+self.n_rays_per_batch, 3])
+        rays_o_total, rays_d_total = self.dataset[dataset_mode].generate_rays_with_pose(pose, W, H)
+        img = np.empty([H*W+self.n_rays_per_batch, 3], dtype=np.float32)
         alpha = np.empty([H*W+self.n_rays_per_batch, 1])
         for pixel in range(0, W*H, self.n_rays_per_batch):
             end = pixel+self.n_rays_per_batch
@@ -298,4 +314,96 @@ class Runner():
         alpha = alpha[:H*W].reshape(H, W, 1)
         if not self.alpha_image:
             img = img + np.array(self.background_color)*(1 - alpha)
+        jt.gc()
         return img
+
+    def gui(self, load_ckpt=True):
+        if self.dataset["test"] is None:
+            self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
+            if self.cfg.dataset_obj is None:
+                self.cfg.dataset_obj = self.dataset["test"]
+                self.build_model()
+            self.image_resolutions = self.dataset["test"].resolution
+            self.W = self.image_resolutions[0]
+            self.H = self.image_resolutions[1]
+        if load_ckpt:
+            assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
+            self.load_ckpt(self.ckpt_path)
+        
+        m_camera = np.asarray([[1., 0., 0., 0.5],[0., -1., 0., 0.5],[0., 0., -1., 0.5]])
+        m_scale = 1.5
+        m_up_dir = np.asarray([0., 1., 0.])
+        view_pos = lambda: m_camera[:, 3]
+        view_dir = lambda: m_camera[:, 2]
+        m_camera[:, 3] -= m_scale * view_dir()
+        image_pos = np.asarray([0., 0.])
+        dpg.create_context()
+        dpg.create_viewport(title='Jittor Graphics', width=1100, height=820)
+        img = self.render_img_with_pose(jt.array(m_camera), "test")
+        with dpg.texture_registry():
+            dpg.add_raw_texture(width=800, height=800, default_value=img, format=dpg.mvFormat_Float_rgb, tag="render_tag")
+        with dpg.window(tag="Primary Window"):
+            dpg.add_image("render_tag")
+        with dpg.window(label='JNeRF', pos=[820, 100]):
+            dpg.add_text("Frame: %.2f ms (%.1f FPS); Mem: %s", tag="frame_text")
+            with dpg.collapsing_header(label="Training", default_open=True):
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="Stop training")
+                    dpg.add_checkbox(label="Train encoding")
+        look_at = lambda: view_pos() + view_dir() * m_scale
+        def rerender():
+            nonlocal m_camera, img
+            img[...] = self.render_img_with_pose(jt.array(m_camera), "test")
+        def mouse_wheel_handler(m, delta):
+            nonlocal image_pos, look_at, m_scale, m_camera
+            scale_factor = pow(1.1, -delta)
+            image_pos = (image_pos - m) / scale_factor + m
+            prev_look_at = look_at()
+            scale = m_scale * scale_factor
+            m_camera[:, 3] = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at
+            m_scale = scale
+            rerender()
+        def set_look_at(pos):
+            nonlocal m_camera, look_at
+            m_camera[:, 3] += pos - look_at()
+        def angleAxis(t, k):
+            x, y, z = list(k)
+            c = cos(t)
+            s = sin(t)
+            v = 1.0 - c
+            return np.asarray([[x*x*v+c, x*y*v-z*s, x*z*v+y*s],
+                               [x*y*v+z*s, y*y*v+c, y*z*v-x*s],
+                               [x*z*v-y*s, y*z*v+x*s, z*z*v+c]])
+        def mouse_drag_handler(button, rel_origin):
+            nonlocal m_up_dir, m_camera, image_pos, look_at
+            rel = np.asarray([-rel_origin[1], -rel_origin[2]], dtype=np.float)
+            if (rel == np.array([0., 0.])).all():
+                return
+            up = m_up_dir
+            side = m_camera[:, 0]
+            is_left_held = button == 33
+            is_right_held = button == dpg.mvMouseButton_Right
+            is_middle_held = button == dpg.mvMouseButton_Middle
+            if is_left_held:
+                rot_sensitivity = 1.0 / 360.
+                rot = angleAxis(-rel[0] * 2 * pi * rot_sensitivity, up) @ \
+                      angleAxis(-rel[1] * 2 * pi * rot_sensitivity, side)
+                image_pos += rel
+                old_loot_at = look_at()
+                set_look_at(np.asarray([0.0, 0.0, 0.0]))
+                m_camera = rot @ m_camera
+                set_look_at(old_loot_at)
+            if is_right_held:
+                rot = angleAxis(-rel[0] * 2 * pi, up) @ angleAxis(-rel[1] * 2 * pi, side)
+            if is_middle_held:
+                rel_ = np.asarray([-rel[0], -rel[1], 0.0])
+                m_camera[:, 3] += m_camera[:, :3] @ rel_
+            rerender()
+        with dpg.handler_registry():
+            dpg.add_mouse_wheel_handler(callback=mouse_wheel_handler)
+            dpg.add_mouse_drag_handler(callback=mouse_drag_handler)
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+        dpg.set_primary_window("Primary Window", True)
+        dpg.start_dearpygui()
+        dpg.destroy_context()

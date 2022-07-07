@@ -5,6 +5,7 @@ sampler = dict(
 encoder = dict(
     pos_encoder = dict(
         type='HashEncoder',
+        log2_hashmap_size=19,
     ),
     dir_encoder = dict(
         type='SHEncoder',
@@ -36,12 +37,12 @@ expdecay=dict(
     decay_end=None
 )
 
-exp_name = "Scarf"
+exp_name = "Easyship"
 dataset_type = 'NerfDataset'
 dataset_dir = 'data/Jrender_Dataset/'+exp_name
 dataset_aabb = {"Car":4, "Coffee":1, "Easyship":8, "Scar":5, "Scarf":8}
-dataset_scale = {"Car":None, "Coffee":None, "Easyship":None, "Scar":None, "Scarf":0.2}
-dataset_offset = {"Car":[-2.0, -0.5, 0.0], "Coffee":None, "Easyship":None, "Scar":None, "Scarf":None}
+dataset_scale = {"Car":None, "Coffee":2, "Easyship":None, "Scar":0.15, "Scarf":0.05}
+dataset_offset = {"Car":None, "Coffee":[0.5, 0, 0.5], "Easyship":None, "Scar":None, "Scarf":None}
 
 dataset = dict(
     train=dict(
@@ -82,6 +83,7 @@ dataset = dict(
 )
 
 log_dir = "./logs"
+load_ckpt = False
 tot_train_steps = 40000
 # Background color, value range from 0 to 1
 background_color = [1, 1, 1]

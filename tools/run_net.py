@@ -47,7 +47,7 @@ def main():
     args = parser.parse_args()
 
     assert args.type in ["novel_view","mesh"],f"{args.type} not support, please choose [novel_view, mesh]"
-    assert args.task in ["train","test","render", "validate_mesh"],f"{args.task} not support, please choose [train, test, render, validate_mesh]"
+    assert args.task in ["train","test","render","validate_mesh","val_all","gui"],f"{args.task} not support, please choose [train, test, render, validate_mesh, val_all, gui]"
     
     if args.task == 'validate_mesh':
         is_continue = True
@@ -68,6 +68,10 @@ def main():
         runner.test(True)
     elif args.task == "render":
         runner.render(True, args.save_dir)
+    elif args.task == "val_all":
+        runner.val_all()
+    elif args.task == "gui":
+        runner.gui()
     elif args.task == 'validate_mesh':
         runner.validate_mesh(world_space=True, resolution=512, threshold=args.mcube_threshold)
 
