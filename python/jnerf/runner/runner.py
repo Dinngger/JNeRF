@@ -1,4 +1,4 @@
-from cmath import pi
+from cmath import pi, isnan
 from math import fmod, cos, sin
 import os
 import time
@@ -80,10 +80,14 @@ class Runner():
                 rgb_target = (rgb_target[..., :3] * rgb_target[..., 3:] + training_background_color * (1 - rgb_target[..., 3:])).detach()
 
                 pos, dir = self.sampler.sample(img_ids, rays_o, rays_d, is_training=True)
-                network_outputs = self.model(pos, dir)
+                network_outputs, normal, normal_target, neg_normal, normal_norm_loss = self.model(pos, dir, True)
                 rgb = self.sampler.rays2rgb(network_outputs, training_background_color)
 
-                loss = self.loss_func(rgb, rgb_target)
+                rgb_loss = jt.mean(self.loss_func(rgb, rgb_target))
+                normal_loss = jt.mean(self.loss_func(normal, normal_target))
+                # neg_normal_loss = jt.mean(neg_normal)
+                normal_norm_loss = jt.mean(normal_norm_loss)
+                loss = rgb_loss + normal_norm_loss + normal_loss * 1e-4 # + neg_normal_loss * 0.1
                 self.optimizer.step(loss)
                 self.ema_optimizer.ema_step()
                 if self.using_fp16:
@@ -95,7 +99,7 @@ class Runner():
                 now = time.monotonic()
                 if now - tqdm_last_update > 0.1:
                     t.update(i - old_training_step)
-                    t.set_postfix(psnr=mse2psnr(loss.mean()/5).item())
+                    t.set_postfix(psnr=mse2psnr(loss.mean()/5).item(), normal_loss=normal_loss.item())
                     old_training_step = i
                     tqdm_last_update = now
         self.save_ckpt(os.path.join(self.save_path, "params.pkl"))
@@ -215,15 +219,15 @@ class Runner():
                     mse = img2mse(jt.array(img), jt.array(img_tar)).item()
                     psnr = mse2psnr(mse)
                     totpsnr += psnr
-                    if psnr < minpsnr:
+                    self.save_img(self.save_path+f"/img{i}.png", img)
+                    self.save_img(self.save_path+f"/tar{i}.png", img_tar)
+                    if psnr < minpsnr or isnan(psnr):
                         min_img = img
                         min_tar = img_tar
                     minpsnr = psnr if psnr<minpsnr else minpsnr
                     maxpsnr = psnr if psnr>maxpsnr else maxpsnr
         psnr = totpsnr/(self.dataset["val"].n_images or 1)
         print(f"PSNR={psnr} [min={minpsnr} max={maxpsnr}]")
-        self.save_img(self.save_path+f"/min_img.png", min_img)
-        self.save_img(self.save_path+f"/min_tar.png", min_tar)
 
     def render_test(self, save_img=True, save_path=None):
         if save_path is None:
@@ -246,8 +250,8 @@ class Runner():
                     if self.dataset["test"].have_img:
                         self.save_img(save_path+f"/{self.exp_name}_gt_{img_i}.png", img_tar)
                 mse_list.append(img2mse(
-                jt.array(img), 
-                jt.array(img_tar)).item())
+                    jt.array(img), 
+                    jt.array(img_tar)).item())
         return mse_list
 
     def save_img(self, path, img, alpha=None):

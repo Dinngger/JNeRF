@@ -128,7 +128,7 @@ __global__ void kernel_grid(
 	const T *__restrict__ grid,
 	const float *__restrict__ positions_in,
 	vector_t<T, N_FEATURES_PER_LEVEL> *__restrict__ encoded_positions,
-	float *__restrict__ dy_dx)
+	T *__restrict__ dy_dx)
 {
 	const uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i >= num_elements)
@@ -208,7 +208,7 @@ __global__ void kernel_grid(
 #pragma unroll
 		for (uint32_t grad_dim = 0; grad_dim < N_POS_DIMS; ++grad_dim)
 		{
-			vector_fullp_t<N_FEATURES_PER_LEVEL> grad = {0};
+			vector_t<T, N_FEATURES_PER_LEVEL> grad = {0};
 
 #pragma unroll
 			for (uint32_t idx = 0; idx < (1 << (N_POS_DIMS - 1)); ++idx)
@@ -241,12 +241,12 @@ __global__ void kernel_grid(
 #pragma unroll
 				for (uint32_t feature = 0; feature < N_FEATURES_PER_LEVEL; ++feature)
 				{
-					((float *)&grad)[feature] += weight * ((float)((T *)&val_right)[feature] - (float)((T *)&val_left)[feature]) * pos_derivative[grad_dim];
+					((T *)&grad)[feature] += (T)weight * (((T *)&val_right)[feature] - ((T *)&val_left)[feature]) * (T)pos_derivative[grad_dim];
 				}
 			}
 
 			const uint32_t fan_out_grad = num_grid_features * N_POS_DIMS;
-			*(vector_fullp_t<N_FEATURES_PER_LEVEL> *)&dy_dx[i * fan_out_grad + level * N_FEATURES_PER_LEVEL + grad_dim * num_grid_features] = grad;
+			*(vector_t<T, N_FEATURES_PER_LEVEL> *)&dy_dx[i * fan_out_grad + level * N_FEATURES_PER_LEVEL + grad_dim * num_grid_features] = grad;
 		}
 	}
 }

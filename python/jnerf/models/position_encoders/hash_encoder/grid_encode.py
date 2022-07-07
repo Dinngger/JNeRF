@@ -62,17 +62,19 @@ class GridEncode(Function):
         self.m_stochastic_interpolation = 0
         header_path = os.path.join(os.path.dirname(__file__), 'op_header')
         proj_options[f"FLAGS: -I{header_path}"]=1
+        self.m_dy_dx = jt.empty([self.num_elements*n_pos_dims*n_features], self.grad_type)
 
     def execute(self, x,m_grid):
         self.num_elements=x.shape[0]
         assert(m_grid.dtype==self.grad_type)
         assert(self.m_encoded_positions.dtype==self.grad_type)
         output = jt.empty([self.num_elements,32], self.grad_type)
-        output,self.m_positions,self.m_encoded_positions = jt.code([ self.m_hashmap_offsets_table, x, m_grid],[output,self.m_positions,self.m_encoded_positions], 
+        output,self.m_positions,self.m_encoded_positions,self.m_dy_dx = jt.code([ self.m_hashmap_offsets_table, x, m_grid],[output,self.m_positions,self.m_encoded_positions,self.m_dy_dx], 
         cuda_header=self.hash_func_header+'#include "HashEncode.h"', cuda_src=f"""
         #define grad_t in2_type
         @alias(m_positions, out1)
         @alias(m_encoded_positions, out2)
+        @alias(m_dy_dx, out3)
         @alias(hashmap_offsets_table,in0)
         cudaStream_t stream=0;
         const unsigned int num_elements=in1_shape0;
@@ -93,7 +95,7 @@ class GridEncode(Function):
         static constexpr uint32_t N_THREADS_HASHGRID = 512;
 		const dim3 blocks_hashgrid = {{ div_round_up(num_elements, N_THREADS_HASHGRID), {self.m_n_levels}, 1 }};
         grad_t*m_grid=(grad_t*)in2_p;
-        float*dy_dx=nullptr;
+        grad_t*dy_dx=(grad_t*)m_dy_dx_p;
         grad_t*m_encoded_positions2=(grad_t*)m_encoded_positions_p;
         auto m_encoded_pos=(vector_t<grad_t,N_FEATURES_PER_LEVEL>*)m_encoded_positions2;
 		kernel_grid<grad_t, N_POS_DIMS, N_FEATURES_PER_LEVEL><<<blocks_hashgrid, N_THREADS_HASHGRID, 0, stream>>>(
@@ -126,6 +128,7 @@ class GridEncode(Function):
         output.compile_options=proj_options
         self.m_positions = self.m_positions.detach()
         self.m_encoded_positions = self.m_encoded_positions.detach()
+        self.m_dy_dx = self.m_dy_dx.detach()
         return output
 
     def grad(self, grad_x):
@@ -186,8 +189,11 @@ class GridEncode(Function):
         self.m_grid_gradient.compile_options=proj_options
         self.m_positions = self.m_positions.detach()
         self.m_encoded_positions = self.m_encoded_positions.detach()
-    
-        return None, self.m_grid_gradient
+
+        dy_dx = jt.reshape(self.m_dy_dx, [-1, self.N_POS_DIMS, self.m_n_features])
+        m_x_gradient = jt.matmul(dy_dx[:self.num_elements, :, :], grad_x.unsqueeze(-1))
+
+        return m_x_gradient.squeeze(2), self.m_grid_gradient
 
 
 

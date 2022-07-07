@@ -20,7 +20,7 @@ Author's email: dinger@stu.xjtu.edu.cn
 '''
 import os
 import jittor as jt
-from jittor import Function
+from jittor import Module
 from jittor.init import constant
 import numpy as np
 from jnerf.ops.code_ops.global_vars import global_headers,proj_options
@@ -28,7 +28,7 @@ from jnerf.utils.config import get_cfg
 from jnerf.utils.registry import ENCODERS
 
 @ENCODERS.register_module()
-class SHGEncoder(Function):
+class SHGEncoder(Module):
     def __init__(self) :
         self.cfg = get_cfg()
         self.using_fp16 = self.cfg.fp16
