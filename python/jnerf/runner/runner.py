@@ -94,7 +94,7 @@ class Runner():
                 now = time.monotonic()
                 if now - tqdm_last_update > 0.1:
                     t.update(i - old_training_step)
-                    t.set_postfix(loss=loss.mean().item())
+                    t.set_postfix(psnr=mse2psnr(loss.mean()/5).item())
                     old_training_step = i
                     tqdm_last_update = now
         self.save_ckpt(os.path.join(self.save_path, "params.pkl"))
@@ -346,7 +346,7 @@ class Runner():
             self.load_ckpt(self.ckpt_path)
         
         m_camera = np.asarray([[1., 0., 0., 0.5],[0., -1., 0., 0.5],[0., 0., -1., 0.5]])
-        m_scale = 1.5
+        m_scale = 8.0 * self.cfg.dataset_obj.aabb_scale
         m_up_dir = np.asarray([0., 1., 0.])
         view_pos = lambda: m_camera[:, 3]
         view_dir = lambda: m_camera[:, 2]

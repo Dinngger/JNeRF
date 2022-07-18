@@ -1,5 +1,6 @@
 __pycache__/
 logs/
+logs_ref/
 data/
 !data/fox
 python/build

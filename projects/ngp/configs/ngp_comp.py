@@ -100,7 +100,7 @@ log_dir = "./logs"
 load_ckpt = False
 tot_train_steps = 40000
 # Background color, value range from 0 to 1
-background_color = [0, 0, 0] #[0, 0, 0] if exp_name == "Scarf" else [1, 1, 1]
+background_color = [0, 0, 0] if exp_name == "Scarf" else [1, 1, 1]
 # Hash encoding function used in Instant-NGP
 hash_func = "p0 ^ p1 * 19349663 ^ p2 * 83492791"
 cone_angle_constant = 0.00390625
