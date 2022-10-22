@@ -96,7 +96,7 @@ dataset = dict(
     ),
 )
 
-log_dir = "./logs"
+log_dir = "./logs_ref"
 load_ckpt = False
 tot_train_steps = 40000
 # Background color, value range from 0 to 1
