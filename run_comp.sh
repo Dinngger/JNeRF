@@ -20,5 +20,9 @@
 ### 
 export PYTHONPATH=$PYTHONPATH:./python
 unset LD_LIBRARY_PATH
-python tools/run_net.py --config-file ./projects/ngp/configs/ngp_comp.py --task B_test
+# export debug=1
+# export gdb_attach=1
+# export log_v=1
+# export trace_py_var=3
+python3 tools/run_net.py --config-file ./projects/ngp/configs/ngp_comp.py --task B_test
 # "train","test","B_test","render","val_all","gui"

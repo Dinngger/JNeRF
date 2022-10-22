@@ -9,3 +9,4 @@ PyMCubes
 trimesh
 plyfile
 open3d
+dearpygui
