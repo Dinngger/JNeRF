@@ -36,11 +36,11 @@ expdecay=dict(
     decay_end=None
 )
 
-exp_name = "Scar"
+exp_name = "Scarf"
 dataset_type = 'NerfDataset'
-dataset_dir = 'my/data/'+exp_name
+dataset_dir = 'data/Jrender_Dataset/'+exp_name
 dataset_aabb = {"Car":4, "Coffee":1, "Easyship":8, "Scar":5, "Scarf":8}
-dataset_scale = {"Car":None, "Coffee":None, "Easyship":None, "Scar":None, "Scarf":0.05}
+dataset_scale = {"Car":None, "Coffee":None, "Easyship":None, "Scar":None, "Scarf":0.2}
 dataset_offset = {"Car":[-2.0, -0.5, 0.0], "Coffee":None, "Easyship":None, "Scar":None, "Scarf":None}
 
 dataset = dict(
