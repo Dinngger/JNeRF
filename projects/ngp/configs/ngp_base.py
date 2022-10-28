@@ -5,6 +5,7 @@ sampler = dict(
 encoder = dict(
     pos_encoder = dict(
         type='HashEncoder',
+        log2_hashmap_size=19,
     ),
     dir_encoder = dict(
         type='SHEncoder',
@@ -62,7 +63,7 @@ dataset = dict(
 
 exp_name = "lego"
 log_dir = "./logs"
-tot_train_steps = 40000
+tot_train_steps = 10000
 # Background color, value range from 0 to 1
 background_color = [0, 0, 0]
 # Hash encoding function used in Instant-NGP

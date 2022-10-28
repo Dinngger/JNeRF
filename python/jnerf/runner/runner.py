@@ -42,6 +42,7 @@ class Runner():
         self.background_color   = self.cfg.background_color
         self.tot_train_steps    = self.cfg.tot_train_steps
         self.n_rays_per_batch   = self.cfg.n_rays_per_batch
+        self.n_rays_per_batch_infer = self.cfg.n_rays_per_batch_infer
         self.using_fp16         = self.cfg.fp16
         self.save_path          = os.path.join(self.cfg.log_dir, self.exp_name)
         if not os.path.exists(self.save_path):
@@ -210,7 +211,7 @@ class Runner():
         with tqdm(range(0,self.dataset["val"].n_images,1), unit="images", desc="rendering val images") as t:
             for i in t:
                 with jt.no_grad():
-                    img, img_tar = self.render_img(dataset_mode="val")
+                    img, _, img_tar = self.render_img(dataset_mode="val")
                     mse = img2mse(jt.array(img), jt.array(img_tar)).item()
                     psnr = mse2psnr(mse)
                     totpsnr += psnr
@@ -272,10 +273,10 @@ class Runner():
             img_ids, W, H)
         rays_pix_total = rays_pix_total.unsqueeze(-1)
         pixel = 0
-        imgs = np.empty([H*W+self.n_rays_per_batch, 3])
-        alphas = np.empty([H*W+self.n_rays_per_batch, 1])
-        for pixel in range(0, W*H, self.n_rays_per_batch):
-            end = pixel+self.n_rays_per_batch
+        imgs = np.empty([H*W+self.n_rays_per_batch_infer, 3])
+        alphas = np.empty([H*W+self.n_rays_per_batch_infer, 1])
+        for pixel in range(0, W*H, self.n_rays_per_batch_infer):
+            end = pixel+self.n_rays_per_batch_infer
             rays_o = rays_o_total[pixel:end]
             rays_d = rays_d_total[pixel:end]
             if end > H*W:
@@ -309,10 +310,10 @@ class Runner():
         W = int(W)
         fake_img_ids = jt.zeros([H*W], 'int32')
         rays_o_total, rays_d_total = self.dataset[dataset_mode].generate_rays_with_pose(pose, W, H)
-        img = np.empty([H*W+self.n_rays_per_batch, 3], dtype=np.float32)
-        alpha = np.empty([H*W+self.n_rays_per_batch, 1])
-        for pixel in range(0, W*H, self.n_rays_per_batch):
-            end = pixel+self.n_rays_per_batch
+        img = np.empty([H*W+self.n_rays_per_batch_infer, 3])
+        alpha = np.empty([H*W+self.n_rays_per_batch_infer, 1])
+        for pixel in range(0, W*H, self.n_rays_per_batch_infer):
+            end = pixel+self.n_rays_per_batch_infer
             rays_o = rays_o_total[pixel:end]
             rays_d = rays_d_total[pixel:end]
             if end > H*W:
@@ -325,10 +326,13 @@ class Runner():
             rgb,a = self.sampler.rays2rgb(network_outputs, inference=True)
             img[pixel:end] = rgb.numpy()
             alpha[pixel:end] = a.numpy()
+            jt.sync_all()
+            jt.gc()
         img = img[:H*W].reshape(H, W, 3)
         alpha = alpha[:H*W].reshape(H, W, 1)
         if not self.alpha_image:
             img = img + np.array(self.background_color)*(1 - alpha)
+        jt.sync_all()
         jt.gc()
         return img
 
@@ -354,7 +358,7 @@ class Runner():
         image_pos = np.asarray([0., 0.])
         dpg.create_context()
         dpg.create_viewport(title='Jittor Graphics', width=1100, height=820)
-        img = self.render_img_with_pose(jt.array(m_camera), "test")
+        img = self.render_img_with_pose(jt.array(m_camera), "test").astype(np.float32)
         with dpg.texture_registry():
             dpg.add_raw_texture(width=800, height=800, default_value=img, format=dpg.mvFormat_Float_rgb, tag="render_tag")
         with dpg.window(tag="Primary Window"):
@@ -368,16 +372,7 @@ class Runner():
         look_at = lambda: view_pos() + view_dir() * m_scale
         def rerender():
             nonlocal m_camera, img
-            img[...] = self.render_img_with_pose(jt.array(m_camera), "test")
-        def mouse_wheel_handler(m, delta):
-            nonlocal image_pos, look_at, m_scale, m_camera
-            scale_factor = pow(1.1, -delta)
-            image_pos = (image_pos - m) / scale_factor + m
-            prev_look_at = look_at()
-            scale = m_scale * scale_factor
-            m_camera[:, 3] = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at
-            m_scale = scale
-            rerender()
+            img[...] = self.render_img_with_pose(jt.array(m_camera), "test").astype(np.float32)
         def set_look_at(pos):
             nonlocal m_camera, look_at
             m_camera[:, 3] += pos - look_at()
@@ -389,34 +384,60 @@ class Runner():
             return np.asarray([[x*x*v+c, x*y*v-z*s, x*z*v+y*s],
                                [x*y*v+z*s, y*y*v+c, y*z*v-x*s],
                                [x*z*v-y*s, y*z*v+x*s, z*z*v+c]])
-        def mouse_drag_handler(button, rel_origin):
+        mouse_down = False
+        old_m_camera, old_image_pos, old_m_scale = m_camera, image_pos, m_scale
+        def mouse_down_handler(button, rel_origin):
+            nonlocal mouse_down, old_m_camera, old_image_pos, old_m_scale, m_camera, image_pos, m_scale
+            if not mouse_down:
+                mouse_down = True
+                old_m_camera, old_image_pos, old_m_scale = m_camera, image_pos, m_scale
+        def state_restore():
+            nonlocal old_m_camera, old_image_pos, old_m_scale, m_camera, image_pos, m_scale
+            m_camera, image_pos, m_scale = old_m_camera, old_image_pos, old_m_scale
+        def mouse_release_handler(button, rel_origin):
+            nonlocal mouse_down
+            mouse_down = False
+        def mouse_wheel_handler(m, delta):
+            nonlocal image_pos, look_at, m_scale, m_camera
+            scale_factor = pow(1.1, -delta)
+            image_pos = (image_pos - m) / scale_factor + m
+            prev_look_at = look_at()
+            scale = m_scale * scale_factor
+            m_camera[:, 3] = (view_pos() - prev_look_at) * (scale / m_scale) + prev_look_at
+            m_scale = scale
+            rerender()
+        def mouse_left_drag_handler(button, rel_origin):
             nonlocal m_up_dir, m_camera, image_pos, look_at
-            rel = np.asarray([-rel_origin[1], -rel_origin[2]], dtype=np.float)
+            rel = np.asarray([rel_origin[1], -rel_origin[2]], dtype=np.float)
             if (rel == np.array([0., 0.])).all():
                 return
+            state_restore()
             up = m_up_dir
             side = m_camera[:, 0]
-            is_left_held = button == 33
-            is_right_held = button == dpg.mvMouseButton_Right
-            is_middle_held = button == dpg.mvMouseButton_Middle
-            if is_left_held:
-                rot_sensitivity = 1.0 / 360.
-                rot = angleAxis(-rel[0] * 2 * pi * rot_sensitivity, up) @ \
-                      angleAxis(-rel[1] * 2 * pi * rot_sensitivity, side)
-                image_pos += rel
-                old_loot_at = look_at()
-                set_look_at(np.asarray([0.0, 0.0, 0.0]))
-                m_camera = rot @ m_camera
-                set_look_at(old_loot_at)
-            if is_right_held:
-                rot = angleAxis(-rel[0] * 2 * pi, up) @ angleAxis(-rel[1] * 2 * pi, side)
-            if is_middle_held:
-                rel_ = np.asarray([-rel[0], -rel[1], 0.0])
-                m_camera[:, 3] += m_camera[:, :3] @ rel_
+            rot_sensitivity = 1.0 / 360.
+            rot = angleAxis(-rel[0] * 2 * pi * rot_sensitivity, up) @ \
+                    angleAxis(-rel[1] * 2 * pi * rot_sensitivity, side)
+            image_pos += rel
+            old_loot_at = look_at()
+            set_look_at(np.asarray([0.0, 0.0, 0.0]))
+            m_camera = rot @ m_camera
+            set_look_at(old_loot_at)
+            rerender()
+        def mouse_right_drag_handler(button, rel_origin):
+            nonlocal m_up_dir, m_camera, image_pos, look_at
+            rel = np.asarray([rel_origin[1], rel_origin[2]], dtype=np.float)
+            if (rel == np.array([0., 0.])).all():
+                return
+            state_restore()
+            rel_ = np.asarray([rel[0], rel[1], 0.0], dtype=np.float) * 0.1
+            m_camera[:, 3] += m_camera[:, :3] @ rel_
             rerender()
         with dpg.handler_registry():
             dpg.add_mouse_wheel_handler(callback=mouse_wheel_handler)
-            dpg.add_mouse_drag_handler(callback=mouse_drag_handler)
+            dpg.add_mouse_down_handler(callback=mouse_down_handler)
+            dpg.add_mouse_release_handler(callback=mouse_release_handler)
+            dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Left, callback=mouse_left_drag_handler)
+            dpg.add_mouse_drag_handler(button=dpg.mvMouseButton_Right, callback=mouse_right_drag_handler)
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.set_primary_window("Primary Window", True)
