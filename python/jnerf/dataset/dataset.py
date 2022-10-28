@@ -70,9 +70,11 @@ class NerfDataset():
         json_paths = []
         for root, dirs, files in os.walk(root_dir):
             for file in files:
-                if os.path.splitext(file)[1] == ".json":
-                    if self.mode in os.path.splitext(file)[0] or (self.mode=="train" and "val" in os.path.splitext(file)[0]):
-                        json_paths.append(os.path.join(root, file))
+                if (file == f'transforms_{self.mode}.json') or (self.mode == 'train' and file == 'transforms_val.json'):
+                    json_paths.append(os.path.join(root, file))
+                # if os.path.splitext(file)[1] == ".json":
+                #     if self.mode in os.path.splitext(file)[0] or (self.mode=="train" and "val" in os.path.splitext(file)[0]):
+                #         json_paths.append(os.path.join(root, file))
         json_data=None
         ## get frames
         for json_path in json_paths:
@@ -92,8 +94,8 @@ class NerfDataset():
             self.W=int(json_data['w'])
 
         frames=json_data['frames']
-        if self.mode=="val":
-            frames=frames[::10]
+        # if self.mode=="val":
+        #     frames=frames[::10]
 
         for frame in tqdm(frames):
             if self.have_img:

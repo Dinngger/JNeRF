@@ -1,4 +1,5 @@
 import os
+import time
 import jittor as jt
 from PIL import Image
 import numpy as np
@@ -23,10 +24,7 @@ class Runner():
         self.dataset            = {}
         self.dataset["train"]   = build_from_cfg(self.cfg.dataset.train, DATASETS)
         self.cfg.dataset_obj    = self.dataset["train"]
-        if self.cfg.dataset.val:
-            self.dataset["val"] = build_from_cfg(self.cfg.dataset.val, DATASETS)
-        else:
-            self.dataset["val"] = self.dataset["train"]
+        self.dataset["val"]     = None
         self.dataset["test"]    = None
         self.model              = build_from_cfg(self.cfg.model, NETWORKS)
         self.cfg.model_obj      = self.model
@@ -60,29 +58,39 @@ class Runner():
         self.H = self.image_resolutions[1]
 
     def train(self):
-        for i in tqdm(range(self.start, self.tot_train_steps)):
-            self.cfg.m_training_step = i
-            img_ids, rays_o, rays_d, rgb_target = next(self.dataset["train"])
-            training_background_color = jt.random([rgb_target.shape[0],3]).stop_grad()
+        old_training_step = self.start
+        tqdm_last_update = time.monotonic()
+        with tqdm(desc="Training", total=self.tot_train_steps, unit="step", initial=self.start) as t:
+            for i in range(self.start, self.tot_train_steps):
+                self.cfg.m_training_step = i
+                img_ids, rays_o, rays_d, rgb_target = next(self.dataset["train"])
+                training_background_color = jt.random([rgb_target.shape[0],3]).stop_grad()
 
-            rgb_target = (rgb_target[..., :3] * rgb_target[..., 3:] + training_background_color * (1 - rgb_target[..., 3:])).detach()
+                rgb_target = (rgb_target[..., :3] * rgb_target[..., 3:] + training_background_color * (1 - rgb_target[..., 3:])).detach()
 
-            pos, dir = self.sampler.sample(img_ids, rays_o, rays_d, is_training=True)
-            network_outputs = self.model(pos, dir)
-            rgb = self.sampler.rays2rgb(network_outputs, training_background_color)
+                pos, dir = self.sampler.sample(img_ids, rays_o, rays_d, is_training=True)
+                network_outputs = self.model(pos, dir)
+                rgb = self.sampler.rays2rgb(network_outputs, training_background_color)
 
-            loss = self.loss_func(rgb, rgb_target)
-            self.optimizer.step(loss)
-            self.ema_optimizer.ema_step()
-            if self.using_fp16:
-                self.model.set_fp16()
+                loss = self.loss_func(rgb, rgb_target)
+                self.optimizer.step(loss)
+                self.ema_optimizer.ema_step()
+                if self.using_fp16:
+                    self.model.set_fp16()
 
-            if i>0 and i%self.val_freq==0:
-                psnr=mse2psnr(self.val_img(i))
-                print("STEP={} | LOSS={} | VAL PSNR={}".format(i,loss.mean().item(), psnr))
+                if i < old_training_step or old_training_step == 0:
+                    old_training_step = 0
+                    t.reset()
+                now = time.monotonic()
+                if now - tqdm_last_update > 0.1:
+                    t.update(i - old_training_step)
+                    t.set_postfix(loss=loss.mean().item())
+                    old_training_step = i
+                    tqdm_last_update = now
         self.save_ckpt(os.path.join(self.save_path, "params.pkl"))
-        self.test()
-    
+        self.val_all()
+        # self.test()
+
     def test(self, load_ckpt=False):
         if load_ckpt:
             assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
@@ -158,7 +166,36 @@ class Runner():
             return img2mse(
                 jt.array(img), 
                 jt.array(img_tar)).item()
-    
+
+    def val_all(self):
+        if self.dataset["val"] is None:
+            if self.cfg.dataset.val:
+                self.dataset["val"] = build_from_cfg(self.cfg.dataset.val, DATASETS)
+            else:
+                print('no val dateset!')
+                return
+        totpsnr = 0
+        minpsnr = 1000
+        maxpsnr = 0
+        min_img = None
+        min_tar = None
+        with tqdm(range(0,self.dataset["val"].n_images,1), unit="images", desc="rendering val images") as t:
+            for i in t:
+                with jt.no_grad():
+                    img, img_tar = self.render_img(dataset_mode="val")
+                    mse = img2mse(jt.array(img), jt.array(img_tar)).item()
+                    psnr = mse2psnr(mse)
+                    totpsnr += psnr
+                    if psnr < minpsnr:
+                        min_img = img
+                        min_tar = img_tar
+                    minpsnr = psnr if psnr<minpsnr else minpsnr
+                    maxpsnr = psnr if psnr>maxpsnr else maxpsnr
+        psnr = totpsnr/(self.dataset["val"].n_images or 1)
+        print(f"PSNR={psnr} [min={minpsnr} max={maxpsnr}]")
+        self.save_img(self.save_path+f"/min_img.png", min_img)
+        self.save_img(self.save_path+f"/min_tar.png", min_tar)
+
     def render_test(self, save_img=True, save_path=None):
         if save_path is None:
             save_path = self.save_path
