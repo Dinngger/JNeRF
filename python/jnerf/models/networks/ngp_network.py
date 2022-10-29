@@ -78,10 +78,14 @@ class NGPNetworks(nn.Module):
     def execute_(self, pos_input, dir_input):  
         dir_input = self.dir_encoder(dir_input)
         pos_input = self.pos_encoder(pos_input)
-        density = self.density_mlp(pos_input)
-        rgb = jt.concat([density, dir_input], -1)
-        rgb = self.rgb_mlp(rgb)
-        outputs = jt.concat([rgb, density[..., :1]], -1)  # batchsize 4: rgbd
+        spatial_out = self.density_mlp(pos_input)
+        density, rgb_d, bottleneck = jt.split(
+            spatial_out, [1, 3, 12], dim=-1
+        )
+        rgb_in = jt.concat([spatial_out, dir_input], -1)
+        rgb_s = self.rgb_mlp(rgb_in)
+        rgb = jt.concat([rgb_d, rgb_s], -1)
+        outputs = jt.concat([rgb, density], -1)  # batchsize 4: rgbd
         return outputs
 
     def density(self, pos_input):  # batchsize,3

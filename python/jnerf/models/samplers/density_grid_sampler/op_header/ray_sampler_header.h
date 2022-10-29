@@ -29,7 +29,7 @@ using namespace Eigen;
 
 #define TCNN_HOST_DEVICE __host__ __device__
 #define TCNN_MIN_GPU_ARCH 70
-#define rgb_length 3
+#define rgb_length 6
 typedef Array<float, rgb_length, 1> RGBArray;
 static constexpr float UNIFORM_SAMPLING_FRACTION = 0.5f;
 constexpr uint32_t n_threads_linear = 128;

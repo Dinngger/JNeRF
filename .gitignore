@@ -1,4 +1,6 @@
 __pycache__/
+.vscode/
+!.vscode/c_cpp_properties.json
 logs/
 logs_ref/
 data/

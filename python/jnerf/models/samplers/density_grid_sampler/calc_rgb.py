@@ -46,7 +46,7 @@ class CalcRgb(Function):
         self.rays_numsteps_compacted = rays_numsteps_compacted.detach()
         self.coords_in = coords_in.detach()
         self.n_rays_per_batch=rays_numsteps.shape[0]
-        rgb_output = jt.code((self.n_rays_per_batch, 3), 'float32',
+        rgb_output = jt.code((self.n_rays_per_batch, 6), 'float32',
                              inputs=[network_output, coords_in, rays_numsteps, rays_numsteps_compacted,training_background_color], 
                              cuda_header=global_headers+self.density_grad_header+'#include "calc_rgb.h"', cuda_src=f"""
         #define grad_t in0_type
@@ -78,7 +78,7 @@ class CalcRgb(Function):
     def grad(self, grad_x):
        # return
        # dloss_doutput num_element x 4
-        dloss_doutput = jt.code((self.num_elements, 4), self.grad_type,
+        dloss_doutput = jt.code((self.num_elements, 7), self.grad_type,
                                 inputs=[self.network_output, self.rays_numsteps_compacted, self.coords_in, grad_x, self.rgb_output, self.density_grid_mean], 
                                 cuda_header=global_headers+self.density_grad_header+'#include "calc_rgb.h"', cuda_src=f"""
         #define grad_t out0_type
@@ -110,7 +110,7 @@ class CalcRgb(Function):
 
         dloss_doutput.compile_options=self.rgb_options
         dloss_doutput.sync()
-        return dloss_doutput, None, None, None,None
+        return dloss_doutput, None, None, None, None, None
 
     def inference(self, network_output, coords_in, rays_numsteps, density_grid_mean):
         # input
@@ -120,7 +120,7 @@ class CalcRgb(Function):
         # return
         # rgb_output n_rays_per_batch x 3
         self.n_rays_per_batch=rays_numsteps.shape[0]
-        rgb_output = jt.empty([self.n_rays_per_batch, 3],'float32')
+        rgb_output = jt.empty([self.n_rays_per_batch, 6],'float32')
         alpha_output = jt.empty([self.n_rays_per_batch, 1],'float32')
         rgb_output,alpha_output = jt.code(inputs=[network_output, coords_in, rays_numsteps], outputs=[rgb_output,alpha_output],
                              cuda_header=global_headers+self.density_grad_header+'#include"calc_rgb.h"', cuda_src=f"""
@@ -140,7 +140,7 @@ class CalcRgb(Function):
         BoundingBox m_aabb = BoundingBox(Eigen::Vector3f::Constant({self.aabb_range[0]}), Eigen::Vector3f::Constant({self.aabb_range[1]}));
         uint32_t padded_output_width=network_output_shape1;
 
-        RGBArray bg_color=RGBArray( {self.bg_color[0]},{self.bg_color[1]},{self.bg_color[2]} );
+        RGBArray bg_color=RGBArray( {self.bg_color[0]},{self.bg_color[1]},{self.bg_color[2]},0,0,0 );
         
         ENerfActivation rgb_activation=ENerfActivation({self.rgb_activation});
         ENerfActivation density_activation=ENerfActivation({self.density_activation});

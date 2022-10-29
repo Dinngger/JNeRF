@@ -28,7 +28,8 @@ __global__ void compacted_coord(
 	uint32_t numsteps = numsteps_in[i * 2 + 0];
 	uint32_t base = numsteps_in[i * 2 + 1];
 	coords_in += base;
-	network_output += base * 4;
+	#define net_out_length (rgb_length + 1)
+	network_output += base * net_out_length;
 
 	float T = 1.f;
 
@@ -42,21 +43,21 @@ __global__ void compacted_coord(
 			// break;
 		}
 
-		const vector_t<TYPE, 4> local_network_output = *(vector_t<TYPE, 4> *)network_output;
-		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
+		const vector_t<TYPE, net_out_length> local_network_output = *(vector_t<TYPE, net_out_length> *)network_output;
+		// const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
 		const Vector3f pos = unwarp_position(coords_in->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in->dt);
 
-		float density = network_to_density(float(local_network_output[3]), density_activation);
+		float density = network_to_density(float(local_network_output[rgb_length]), density_activation);
 
 		const float alpha = 1.f - __expf(-density * dt);
 
 		T *= (1.f - alpha);
-		network_output += 4;
+		network_output += net_out_length;
 		coords_in += 1;
 	}
 
-	network_output -= 4 * compacted_numsteps; // rewind the pointer
+	network_output -= net_out_length * compacted_numsteps; // rewind the pointer
 	coords_in -= compacted_numsteps;
 
 	uint32_t compacted_base = atomicAdd(numsteps_counter, compacted_numsteps); // first entry in the array is a counter

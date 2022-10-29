@@ -37,7 +37,7 @@ expdecay=dict(
     decay_end=None
 )
 
-exp_name = "Car"
+exp_name = "Easyship"
 dataset_type = 'NerfDataset'
 dataset_dir = 'data/fixed/'+exp_name
 dataset_aabb = {"Car":4, "Coffee":1, "Easyship":2, "Scar":5, "Scarf":8}
@@ -96,9 +96,9 @@ dataset = dict(
     ),
 )
 
-log_dir = "./logs"
+log_dir = "./logs_ref"
 load_ckpt = False
-tot_train_steps = 40000
+tot_train_steps = 10000
 # Background color, value range from 0 to 1
 background_color = [0, 0, 0] if exp_name == "Scarf" else [1, 1, 1]
 # Hash encoding function used in Instant-NGP
@@ -115,3 +115,4 @@ target_batch_size = 1<<18
 const_dt=True
 # Use fp16 for faster training
 fp16 = True
+rgb_length = 6

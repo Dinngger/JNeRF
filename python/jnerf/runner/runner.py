@@ -92,7 +92,9 @@ class Runner():
 
                 pos, dir = self.sampler.sample(img_ids, rays_o, rays_d, is_training=True)
                 network_outputs = self.model(pos, dir)
-                rgb = self.sampler.rays2rgb(network_outputs, training_background_color)
+
+                training_background_color = jt.concat([training_background_color, jt.zeros([rgb_target.shape[0],3])], -1)
+                rgb = self.sampler.rays2rgb(network_outputs, training_background_color)[..., :3]
 
                 loss = self.loss_func(rgb, rgb_target)
                 self.optimizer.step(loss)
@@ -298,7 +300,8 @@ class Runner():
 
             pos, dir = self.sampler.sample(img_ids, rays_o, rays_d)
             network_outputs = self.model(pos, dir)
-            rgb,alpha = self.sampler.rays2rgb(network_outputs, inference=True)
+            rgbs, alpha = self.sampler.rays2rgb(network_outputs, inference=True)
+            rgb = rgbs[..., :3]
             imgs[pixel:end] = rgb.numpy()
             alphas[pixel:end] = alpha.numpy()
             jt.sync_all()
@@ -334,7 +337,8 @@ class Runner():
                     [rays_d, jt.ones([end-H*W]+rays_d.shape[1:], rays_d.dtype)], dim=0)
             pos, dir = self.sampler.sample(fake_img_ids, rays_o, rays_d)
             network_outputs = self.model(pos, dir)
-            rgb,a = self.sampler.rays2rgb(network_outputs, inference=True)
+            rgbs,a = self.sampler.rays2rgb(network_outputs, inference=True)
+            rgb = rgbs[..., :3]
             img[pixel:end] = rgb.numpy()
             alpha[pixel:end] = a.numpy()
             jt.sync_all()

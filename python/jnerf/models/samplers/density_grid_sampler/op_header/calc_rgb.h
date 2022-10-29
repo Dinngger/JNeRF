@@ -57,10 +57,11 @@ __global__ void compute_rgbs(
 		float density = network_to_density(float(local_network_output[3]), density_activation);
 
 		const float alpha = 1.f - __expf(-density * dt);
-		const float weight = alpha * T;
-		rgb_ray += weight * rgb;
-
+		const Array<float, 3, 1> rgb_d = rgb.block<3, 1>(0, 0);
+		const Array<float, 3, 1> rgb_s = rgb.block<3, 1>(3, 0);
+		rgb_ray.block<3, 1>(0, 0) += T * (alpha * rgb_d + rgb_s);
 		T *= (1.f - alpha);
+
 		network_output += padded_output_width;
 		coords_in += 1;
 	}
@@ -121,13 +122,17 @@ __global__ void compute_rgbs_grad(
 		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
 		float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
 		float density = network_to_density(float(local_network_output[3]), density_activation);
+	
 		const float alpha = 1.f - __expf(-density * dt);
-		const float weight = alpha * T;
-		rgb_ray2 += weight * rgb;
+		const Array<float, 3, 1> rgb_d = rgb.block<3, 1>(0, 0);
+		const Array<float, 3, 1> rgb_s = rgb.block<3, 1>(3, 0);
+		rgb_ray2.block<3, 1>(0, 0) += T * (alpha * rgb_d + rgb_s);
+		const Array<float, 3, 1> loss_grad_rgb = T * (*loss_grad).block<3, 1>(0, 0);
+		const RGBArray suffix = *rgb_ray - rgb_ray2;
 		T *= (1.f - alpha);
-
-		const Array3f suffix = *rgb_ray - rgb_ray2; 
-		const Array3f dloss_by_drgb = weight * (*loss_grad);
+		const RGBArray dloss_by_drgb;
+		dloss_by_drgb.block<3, 1>(0, 0) = alpha * loss_grad_rgb;
+		dloss_by_drgb.block<3, 1>(3, 0) = loss_grad_rgb;
 
 		vector_t<TYPE, 4> local_dL_doutput;
 
@@ -196,50 +201,3 @@ __global__ void compute_rgbs_inference(
 		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
 		const Vector3f pos = unwarp_position(coords_in.ptr->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
-
-//compute_rgbs in float16 type
-void compute_rgbs_fp16_3(
-    uint32_t shmem_size,
-    cudaStream_t stream,
-	const uint32_t n_rays,						//batch total rays number
-	BoundingBox aabb,							//boundingbox range
-	int padded_output_width,    				//network output width
-	const __half *network_output, 				//network output
-	ENerfActivation rgb_activation, 			//activation of rgb in output 
-	ENerfActivation density_activation,			//activation of density in output 
-	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
-	uint32_t *__restrict__ numsteps_in,			//rays offset and base counter before compact
-	RGBArray *rgb_output, 						//rays rgb output
-	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
-	const RGBArray *bg_color_ptr,				//background color 
-	int NERF_CASCADES,							//num of density grid level
-	float MIN_CONE_STEPSIZE						//lower bound of step size
-	);
-
-//compute_rgbs_grad in float16 type
-void compute_rgbs_grad_fp16_3(
-    uint32_t shmem_size,
-    cudaStream_t stream,
-	const uint32_t n_rays,						//batch total rays number
-	BoundingBox aabb,							//boundingbox range
-	int padded_output_width,					//network output width
-	__half *__restrict__ dloss_doutput,			//dloss_dnetworkoutput,shape same as network output
-	const __half *network_output,					//network output
-	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
-	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
-	ENerfActivation rgb_activation,				//activation of rgb in output 
-	ENerfActivation density_activation,			//activation of density in output 
-	RGBArray *__restrict__ loss_grad,			//dloss_dRGBoutput
-	RGBArray *__restrict__ rgb_ray,				//RGB from forward calculation
-	float *__restrict__ density_grid_mean,		//density_grid mean value,
-	int NERF_CASCADES,							//num of density grid level
-	float MIN_CONE_STEPSIZE						//lower bound of step size
-	);
-
-		T *= (1.f - alpha);
-		network_output += padded_output_width;
-		coords_in += 1;
-	}
-	rgb_output[i] = rgb_ray;
-	alpha_output[i] = 1-T;
-}

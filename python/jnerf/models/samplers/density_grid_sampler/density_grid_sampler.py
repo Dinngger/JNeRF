@@ -175,7 +175,7 @@ class DensityGridSampler(nn.Module):
     
     def rays2rgb_(self, network_outputs, training_background_color=None, inference=False):
         if training_background_color is None:
-            background_color = self.background_color
+            background_color = [*self.background_color, 0, 0, 0]
         else:
             background_color = training_background_color
         assert network_outputs.shape[0]==self._coords.shape[0]
