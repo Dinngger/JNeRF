@@ -10,6 +10,57 @@ from jnerf.ops.code_ops.global_vars import global_headers,proj_options,ngp_suffi
 from jnerf.utils.config import get_cfg
 jt.flags.use_cuda = 1
 
+class LinearToSRGB(Function):
+    def execute(self, x):
+        self.save_vars = x
+        return self.inference(x)
+
+    def grad(self, gx):
+        x = self.save_vars
+        return jt.code(x.shape, x.dtype, [x, gx], cuda_src="""
+            __global__ static void linear_to_srgb_derivative(@ARGS_DEF) {
+                @PRECALC
+                for (int i=blockIdx.x; i<in0_shape0; i+=gridDim.x)
+                for (int j=threadIdx.x; j<in0_shape1; j+=blockDim.x) {
+                    float linear = @in0(i, j);
+                    float grad = @in1(i, j);
+                    if (linear < 0.0031308f) {
+                        @out(i, j) = 12.92f * grad;
+                    } else {
+                        @out(i, j) = 1.055f * 0.41666f * std::pow(linear, 0.41666f - 1.0f) * grad;
+                    }
+                }
+            }
+            int tx = min(256, in0_shape1);
+            int by = ((in0_shape1 - 1) / tx + 1);
+            int bx = in0_shape0;
+            dim3 s2(tx);
+            dim3 s1(bx, by);
+            linear_to_srgb_derivative<<<s1, s2>>>(@ARGS);
+        """)
+
+    def inference(self, x):
+        return jt.code(x.shape, x.dtype, [x], cuda_src="""
+            __global__ static void linear_to_srgb(@ARGS_DEF) {
+                @PRECALC
+                for (int i=blockIdx.x; i<in0_shape0; i+=gridDim.x)
+                for (int j=threadIdx.x; j<in0_shape1; j+=blockDim.x) {
+                    float linear = @in0(i, j);
+                    if (linear < 0.0031308f) {
+                        @out(i, j) = 12.92f * linear;
+                    } else {
+                        @out(i, j) = 1.055f * std::pow(linear, 0.41666f) - 0.055f;
+                    }
+                }
+            }
+            int tx = min(256, in0_shape1);
+            int by = ((in0_shape1 - 1) / tx + 1);
+            int bx = in0_shape0;
+            dim3 s2(tx);
+            dim3 s1(bx, by);
+            linear_to_srgb<<<s1, s2>>>(@ARGS);
+        """)
+
 class CalcRgb(Function):
     def __init__(self, density_grad_header, aabb_range=(-1.5, 2.5), n_rays_per_batch=4096, n_rays_step=1024, padded_output_width=4, bg_color=[1, 1, 1], using_fp16=False):
         self.density_grad_header = density_grad_header

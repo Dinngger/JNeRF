@@ -86,18 +86,21 @@ class Runner():
             for i in range(self.start, self.tot_train_steps):
                 self.cfg.m_training_step = i
                 img_ids, rays_o, rays_d, rgb_target = next(self.dataset["train"])
-                training_background_color = jt.random([rgb_target.shape[0],3]).stop_grad()
+                if i < 2000:
+                    training_background_color = jt.random([rgb_target.shape[0],3]).stop_grad()
+                else:
+                    training_background_color = jt.broadcast(jt.array(self.background_color), rgb_target[..., :3], dims=[0]).stop_grad()
 
                 rgb_target = (rgb_target[..., :3] * rgb_target[..., 3:] + training_background_color * (1 - rgb_target[..., 3:])).detach()
 
                 pos, dir = self.sampler.sample(img_ids, rays_o, rays_d, is_training=True)
-                network_outputs = self.model(pos, dir)
+                network_outputs = self.model(pos, dir, training=False)
 
                 training_background_color = jt.concat([training_background_color, jt.zeros([rgb_target.shape[0],3])], -1)
                 rgb = self.sampler.rays2rgb(network_outputs, training_background_color)[..., :3]
 
                 loss = self.loss_func(rgb, rgb_target)
-                self.optimizer.step(loss)
+                self.optimizer.step(loss) # + rgb_ref_loss * 0.0)
                 self.ema_optimizer.ema_step()
                 if self.using_fp16:
                     self.model.set_fp16()
@@ -112,7 +115,7 @@ class Runner():
                     old_training_step = i
                     tqdm_last_update = now
         self.save_ckpt(os.path.join(self.save_path, "params.pkl"))
-        self.val_all()
+        # self.val_all()
         # self.test()
 
     def test(self, load_ckpt=False, B_test=False):
