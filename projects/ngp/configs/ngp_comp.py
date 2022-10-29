@@ -8,7 +8,7 @@ encoder = dict(
         log2_hashmap_size=19,
     ),
     dir_encoder = dict(
-        type='SHEncoder',
+        type='SHGEncoder',
     ),
 )
 model = dict(

@@ -18,7 +18,7 @@ class CalcRgb(Function):
         self.padded_output_width = padded_output_width
         self.num_elements = n_rays_per_batch*n_rays_step
         # activation 0:None 1:relu 2:sigmoid 3:exp
-        self.rgb_activation = 2
+        self.rgb_activation = 0
         self.density_activation = 3
         self.ray_numstep_counter = jt.zeros([2], 'int32')
         self.code_path = pathlib.Path(__file__).parent.resolve()

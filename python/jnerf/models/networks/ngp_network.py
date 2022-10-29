@@ -51,7 +51,7 @@ class NGPNetworks(nn.Module):
             assert self.pos_encoder.out_dim%16==0
             assert self.dir_encoder.out_dim%16==0
             self.density_mlp = FMLP([self.pos_encoder.out_dim, density_n_neurons, 16])
-            self.rgb_mlp = FMLP([self.dir_encoder.out_dim+16, rgb_n_neurons, rgb_n_neurons, 3])
+            self.rgb_mlp = FMLP([self.dir_encoder.out_dim+16+1, rgb_n_neurons, rgb_n_neurons, 3])
         else:
             if self.use_fully and not (jt.flags.cuda_archs[0] >= 75):
                 print("Warning: Sm arch is lower than sm_75, FFMLPs is not supported. Automatically use original MLPs instead.")
@@ -61,11 +61,15 @@ class NGPNetworks(nn.Module):
                 nn.Linear(self.pos_encoder.out_dim, density_n_neurons, bias=False), 
                 nn.ReLU(), 
                 nn.Linear(density_n_neurons, 16, bias=False))
-            self.rgb_mlp = nn.Sequential(nn.Linear(self.dir_encoder.out_dim+16, rgb_n_neurons, bias=False),
+            self.rgb_mlp = nn.Sequential(nn.Linear(self.dir_encoder.out_dim+16+1, rgb_n_neurons, bias=False),
                             nn.ReLU(),
                             nn.Linear(rgb_n_neurons, rgb_n_neurons, bias=False),
                             nn.ReLU(),
                             nn.Linear(rgb_n_neurons, 3, bias=False))
+
+        HARMONIC_COUNTS = [1, 3, 5, 7, 9, 11, 13, 15]
+        levels = jt.array([x for i, y in enumerate(HARMONIC_COUNTS[:4]) for x in [i] * y])
+        self.levels = levels * (levels + 1)
         self.set_fp16()
 
     def execute(self, pos_input, dir_input):  
@@ -75,13 +79,27 @@ class NGPNetworks(nn.Module):
         else:
             return self.execute_(pos_input, dir_input)
 
-    def execute_(self, pos_input, dir_input):  
-        dir_input = self.dir_encoder(dir_input)
+    def execute_(self, pos_input, dir):  
         pos_input = self.pos_encoder(pos_input)
-        density = self.density_mlp(pos_input)
-        rgb = jt.concat([density, dir_input], -1)
-        rgb = self.rgb_mlp(rgb)
-        outputs = jt.concat([rgb, density[..., :1]], -1)  # batchsize 4: rgbd
+        spatial_out = self.density_mlp(pos_input)
+        density, rgb_d, spectral, roughness, normal, bottleneck = jt.split(
+            spatial_out, [1, 3, 1, 1, 3, 7], dim=-1
+        )
+
+        roughness = nn.softplus(roughness)
+        normal = jt.normalize(normal, dim=-1, eps=1e-10)
+
+        normal_dot = jt.sum(dir * normal, dim=-1, keepdims=True)
+        reflection = dir - 2 * normal * normal_dot
+        attenuation = jt.exp(-roughness * self.levels / 2)
+        ref_enc = self.dir_encoder(reflection) * attenuation
+        if self.using_fp16:
+            normal_dot=normal_dot.float16()
+
+        rgb_in = jt.concat([spatial_out, ref_enc, -normal_dot], -1)
+        rgb_s = self.rgb_mlp(rgb_in)
+        rgb = (rgb_d + rgb_s).sigmoid()
+        outputs = jt.concat([rgb, density], -1)  # batchsize 4: rgbd
         return outputs
 
     def density(self, pos_input):  # batchsize,3
