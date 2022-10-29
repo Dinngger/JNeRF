@@ -60,7 +60,7 @@ __global__ void compute_rgbs(
 		const float beta = 1.f - __expf(-100.f*dt);
 		const Array<float, 3, 1> rgb_d = rgb.block<3, 1>(0, 0);
 		const Array<float, 3, 1> rgb_s = rgb.block<3, 1>(3, 0);
-		rgb_ray.block<3, 1>(0, 0) += T * (alpha * rgb_d + beta * rgb_s);
+		rgb_ray.block<3, 1>(0, 0) += (rgb_d * alpha + rgb_s * beta) * T;
 		T *= (1.f - alpha);
 
 		network_output += padded_output_width;
@@ -124,17 +124,20 @@ __global__ void compute_rgbs_grad(
 		float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
 		float density = network_to_density(float(local_network_output[3]), density_activation);
 
+		const RGBArray suffix;
+		const RGBArray dloss_by_drgb;
+
 		const float alpha = 1.f - __expf(-density * dt);
 		const float beta = 1.f - __expf(-100.f*dt);
 		const Array<float, 3, 1> rgb_d = rgb.block<3, 1>(0, 0);
 		const Array<float, 3, 1> rgb_s = rgb.block<3, 1>(3, 0);
-		rgb_ray2.block<3, 1>(0, 0) += T * (alpha * rgb_d + beta * rgb_s);
-		const Array<float, 3, 1> loss_grad_rgb = T * (*loss_grad).block<3, 1>(0, 0);
-		const RGBArray suffix = *rgb_ray - rgb_ray2;
+		rgb_ray2.block<3, 1>(0, 0) += (rgb_d * alpha + rgb_s * beta) * T;
+		const float T_alpha = T * alpha;
+		const float T_beta = T * beta;
+		suffix = *rgb_ray - rgb_ray2;
 		T *= (1.f - alpha);
-		const RGBArray dloss_by_drgb;
-		dloss_by_drgb.block<3, 1>(0, 0) = alpha * loss_grad_rgb;
-		dloss_by_drgb.block<3, 1>(3, 0) = beta * loss_grad_rgb;
+		dloss_by_drgb.block<3, 1>(0, 0) = (*loss_grad).block<3, 1>(0, 0) * T_alpha;
+		dloss_by_drgb.block<3, 1>(3, 0) = (*loss_grad).block<3, 1>(0, 0) * T_beta;
 
 		vector_t<TYPE, 4> local_dL_doutput;
 

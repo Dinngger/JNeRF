@@ -68,14 +68,14 @@ class NGPNetworks(nn.Module):
                             nn.Linear(rgb_n_neurons, 6, bias=False))
         self.set_fp16()
 
-    def execute(self, pos_input, dir_input, training=False):  
+    def execute(self, pos_input, dir_input):  
         if self.using_fp16:
             with jt.flag_scope(auto_mixed_precision_level=5):
-                return self.execute_(pos_input, dir_input, training)
+                return self.execute_(pos_input, dir_input)
         else:
-            return self.execute_(pos_input, dir_input, training)
+            return self.execute_(pos_input, dir_input)
 
-    def execute_(self, pos_input, dir_input, training=False):  
+    def execute_(self, pos_input, dir_input):  
         dir_input = self.dir_encoder(dir_input)
         pos_input = self.pos_encoder(pos_input)
         spatial_out = self.density_mlp(pos_input)
@@ -88,11 +88,7 @@ class NGPNetworks(nn.Module):
         )
         rgb = jt.concat([rgb_d + rgb_ds, rgb_s], -1)
         outputs = jt.concat([rgb, density], -1)  # batchsize 4: rgbd
-        if training:
-            rgb_ref_loss = jt.mean(rgb_ds.sigmoid())
-            return outputs, rgb_ref_loss
-        else:
-            return outputs
+        return outputs
 
     def density(self, pos_input):  # batchsize,3
         density = self.pos_encoder(pos_input)

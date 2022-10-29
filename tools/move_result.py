@@ -2,7 +2,7 @@
 import os
 import shutil
 
-dirs = ['Coffee', 'Easyship']
+dirs = ['Coffee', 'Easyship', 'Scar']
 test_back = 'B_'
 cnt = 0
 logs_dir = '../logs_ref/'
