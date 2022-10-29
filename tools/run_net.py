@@ -7,6 +7,7 @@ import os
 from jnerf.runner import Runner,NeuSRunner
 from jnerf.utils.config import init_cfg, get_cfg
 from jnerf.utils.registry import build_from_cfg,NETWORKS,SCHEDULERS,DATASETS,OPTIMS,SAMPLERS,LOSSES
+from jnerf.utils.general import get_data_o
 # jt.flags.gopt_disable=1
 jt.flags.use_cuda = 1
 
@@ -55,6 +56,7 @@ def main():
     if args.config_file:
         init_cfg(args.config_file)
 
+    get_data_o()
     if args.type == 'novel_view':
         runner = Runner()
     elif args.type == 'mesh':

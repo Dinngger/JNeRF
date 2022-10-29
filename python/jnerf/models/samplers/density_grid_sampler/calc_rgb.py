@@ -21,6 +21,7 @@ class CalcRgb(Function):
         self.rgb_activation = 2
         self.density_activation = 3
         self.ray_numstep_counter = jt.zeros([2], 'int32')
+        user_jittor_path = os.path.expanduser("~/.cache/jittor/ngp_cache")
         self.code_path = pathlib.Path(__file__).parent.resolve()
         self.rgb_options = copy.deepcopy(proj_options)
         if using_fp16:
@@ -68,7 +69,6 @@ class CalcRgb(Function):
 
         rgb_output.compile_options = self.rgb_options
         rgb_output.sync()
-        print(rgb_output)
         self.rgb_output = rgb_output.detach()
         return rgb_output
 
