@@ -4,8 +4,9 @@ import pathlib
 import jittor as jt
 import jnerf
 from jittor import Function, exp, log
+import jittor_utils
 import numpy as np
-from jnerf.ops.code_ops.global_vars import global_headers,proj_options
+from jnerf.ops.code_ops.global_vars import global_headers,proj_options,ngp_suffix,fn_mapping
 jt.flags.use_cuda = 1
 
 class CalcRgb(Function):
@@ -21,8 +22,9 @@ class CalcRgb(Function):
         self.rgb_activation = 2
         self.density_activation = 3
         self.ray_numstep_counter = jt.zeros([2], 'int32')
-        user_jittor_path = os.path.expanduser("~/.cache/jittor/ngp_cache")
+        user_jittor_path = os.path.join(jittor_utils.cache_path, "ngp_cache")
         self.code_path = pathlib.Path(__file__).parent.resolve()
+        # self.so_name = os.path.join(user_jittor_path, fn_mapping["cr"]+ngp_suffix)
         self.rgb_options = copy.deepcopy(proj_options)
         if using_fp16:
             self.grad_type = 'float16'
