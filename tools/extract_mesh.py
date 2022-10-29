@@ -6,9 +6,11 @@ import os
 import argparse
 from plyfile import PlyData, PlyElement
 from jnerf.runner import Runner
+from jnerf.utils.registry import build_from_cfg,DATASETS
 from jnerf.utils.config import init_cfg
 import time
 from tqdm import tqdm
+
 def mesh():
     parser = argparse.ArgumentParser(description="Jittor Object Detection Training")
     parser.add_argument(
@@ -35,9 +37,18 @@ def mesh():
     if args.config_file:
         init_cfg(args.config_file)
     runner = Runner()
+    if runner.dataset["test"] is None:
+        runner.dataset["test"] = build_from_cfg(runner.cfg.dataset.test, DATASETS)
+        if runner.cfg.dataset_obj is None:
+            runner.cfg.dataset_obj = runner.dataset["test"]
+            runner.build_model()
+        runner.image_resolutions = runner.dataset["test"].resolution
+        runner.W = runner.image_resolutions[0]
+        runner.H = runner.image_resolutions[1]
+    assert os.path.exists(runner.ckpt_path), "ckpt file does not exist: "+ runner.ckpt_path
     runner.load_ckpt(runner.ckpt_path)
     mesh_dir = runner.save_path
-    aabb_scale = runner.dataset["train"].aabb_scale
+    aabb_scale = runner.dataset["test"].aabb_scale
     N = args.resolution
     xmin, xmax = 0, 1
     ymin, ymax = 0, 1
