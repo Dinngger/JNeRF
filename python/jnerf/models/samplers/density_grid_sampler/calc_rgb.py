@@ -54,7 +54,6 @@ class CalcRgb(Function):
         @alias(training_background_color,in4)
         cudaStream_t stream=0;
     
-     
         const unsigned int num_elements=network_output_shape0;
         const uint32_t n_rays=rays_numsteps_shape0;
         BoundingBox m_aabb = BoundingBox(Eigen::Vector3f::Constant({self.aabb_range[0]}), Eigen::Vector3f::Constant({self.aabb_range[1]}));
@@ -69,6 +68,7 @@ class CalcRgb(Function):
 
         rgb_output.compile_options = self.rgb_options
         rgb_output.sync()
+        print(rgb_output)
         self.rgb_output = rgb_output.detach()
         return rgb_output
 
@@ -89,7 +89,9 @@ class CalcRgb(Function):
 
 
         cudaStream_t stream=0;
-    
+        calculate_rgb_grad ccg = nullptr;
+        // LOGir << ccg_ptr;
+        // gpuErrchk(cudaMemcpyFromSymbol(&ccg, ccg_ptr, sizeof(calculate_rgb_grad)));
         cudaMemsetAsync(out0_p, 0, out0->size);
         const unsigned int num_elements=network_output_shape0;
         const uint32_t n_rays=rays_numsteps_shape0;
@@ -128,8 +130,8 @@ class CalcRgb(Function):
  
 
         cudaStream_t stream=0;
-    
-     
+        calculate_rgb cc;
+        // gpuErrchk(cudaMemcpyFromSymbol(&cc, cc_ptr, sizeof(calculate_rgb)));
         const unsigned int num_elements=network_output_shape0;
         const uint32_t n_rays=rays_numsteps_shape0;
         BoundingBox m_aabb = BoundingBox(Eigen::Vector3f::Constant({self.aabb_range[0]}), Eigen::Vector3f::Constant({self.aabb_range[1]}));

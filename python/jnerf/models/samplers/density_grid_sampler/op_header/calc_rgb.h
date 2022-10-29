@@ -197,11 +197,44 @@ __global__ void compute_rgbs_inference(
 		const Vector3f pos = unwarp_position(coords_in.ptr->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
 
-		float density = network_to_density(float(local_network_output[3]), density_activation);
+//compute_rgbs in float16 type
+void compute_rgbs_fp16(
+    uint32_t shmem_size,
+    cudaStream_t stream,
+	const uint32_t n_rays,						//batch total rays number
+	BoundingBox aabb,							//boundingbox range
+	int padded_output_width,    				//network output width
+	const __half *network_output, 				//network output
+	ENerfActivation rgb_activation, 			//activation of rgb in output 
+	ENerfActivation density_activation,			//activation of density in output 
+	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
+	uint32_t *__restrict__ numsteps_in,			//rays offset and base counter before compact
+	Array3f *rgb_output, 						//rays rgb output
+	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
+	const Array3f *bg_color_ptr,				//background color 
+	int NERF_CASCADES,							//num of density grid level
+	float MIN_CONE_STEPSIZE						//lower bound of step size
+	);
 
-		const float alpha = 1.f - __expf(-density * dt);
-		const float weight = alpha * T;
-		rgb_ray += weight * rgb;
+//compute_rgbs_grad in float16 type
+void compute_rgbs_grad_fp16(
+    uint32_t shmem_size,
+    cudaStream_t stream,
+	const uint32_t n_rays,						//batch total rays number
+	BoundingBox aabb,							//boundingbox range
+	int padded_output_width,					//network output width
+	__half *__restrict__ dloss_doutput,			//dloss_dnetworkoutput,shape same as network output
+	const __half *network_output,					//network output
+	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
+	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
+	ENerfActivation rgb_activation,				//activation of rgb in output 
+	ENerfActivation density_activation,			//activation of density in output 
+	Array3f *__restrict__ loss_grad,			//dloss_dRGBoutput
+	Array3f *__restrict__ rgb_ray,				//RGB from forward calculation
+	float *__restrict__ density_grid_mean,		//density_grid mean value,
+	int NERF_CASCADES,							//num of density grid level
+	float MIN_CONE_STEPSIZE						//lower bound of step size
+	);
 
 		T *= (1.f - alpha);
 		network_output += padded_output_width;
