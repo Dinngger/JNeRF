@@ -25,7 +25,7 @@ class CalcRgb(Function):
         self.ray_numstep_counter = jt.zeros([2], 'int32')
         user_jittor_path = os.path.join(jittor_utils.cache_path, "ngp_cache")
         self.code_path = pathlib.Path(__file__).parent.resolve()
-        # self.so_name = os.path.join(user_jittor_path, fn_mapping["cr"]+ngp_suffix)
+        # self.so_name = os.path.join(user_jittor_path, fn_mapping["cr"]+f"_{self.rgb_length}"+ngp_suffix)
         self.rgb_options = copy.deepcopy(proj_options)
         if using_fp16:
             self.grad_type = 'float16'
