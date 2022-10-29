@@ -51,7 +51,7 @@ class NGPNetworks(nn.Module):
             assert self.pos_encoder.out_dim%16==0
             assert self.dir_encoder.out_dim%16==0
             self.density_mlp = FMLP([self.pos_encoder.out_dim, density_n_neurons, 16])
-            self.rgb_mlp = FMLP([self.dir_encoder.out_dim+16, rgb_n_neurons, rgb_n_neurons, 6])
+            self.rgb_mlp = FMLP([self.dir_encoder.out_dim+16, rgb_n_neurons, rgb_n_neurons, 3])
         else:
             if self.use_fully and not (jt.flags.cuda_archs[0] >= 75):
                 print("Warning: Sm arch is lower than sm_75, FFMLPs is not supported. Automatically use original MLPs instead.")
@@ -65,7 +65,7 @@ class NGPNetworks(nn.Module):
                             nn.ReLU(),
                             nn.Linear(rgb_n_neurons, rgb_n_neurons, bias=False),
                             nn.ReLU(),
-                            nn.Linear(rgb_n_neurons, 6, bias=False))
+                            nn.Linear(rgb_n_neurons, 3, bias=False))
         self.set_fp16()
 
     def execute(self, pos_input, dir_input):  
@@ -79,14 +79,12 @@ class NGPNetworks(nn.Module):
         dir_input = self.dir_encoder(dir_input)
         pos_input = self.pos_encoder(pos_input)
         spatial_out = self.density_mlp(pos_input)
-        density, rgb_d, bottleneck = jt.split(
-            spatial_out, [1, 3, 12], dim=-1
+        density, rgb_d, trans, bottleneck = jt.split(
+            spatial_out, [1, 3, 1, 11], dim=-1
         )
         rgb_in = jt.concat([spatial_out, dir_input], -1)
-        rgb_ds, rgb_s = jt.split(
-            self.rgb_mlp(rgb_in), [3, 3], dim=-1
-        )
-        rgb = jt.concat([rgb_d + rgb_ds, rgb_s], -1)
+        rgb_s = self.rgb_mlp(rgb_in)
+        rgb = jt.concat([rgb_d + rgb_s * (1 - trans), rgb_s * trans], -1)
         outputs = jt.concat([rgb, density], -1)  # batchsize 4: rgbd
         return outputs
 
