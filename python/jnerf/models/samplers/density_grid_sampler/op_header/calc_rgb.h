@@ -17,9 +17,9 @@ __global__ void compute_rgbs(
 	ENerfActivation density_activation,			//activation of density in output 
 	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
 	uint32_t *__restrict__ numsteps_in,			//rays offset and base counter before compact
-	Array3f *rgb_output, 						//rays rgb output
+	RGBArray *rgb_output, 						//rays rgb output
 	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
-	const Array3f *bg_color_ptr,				//background color 
+	const RGBArray *bg_color_ptr,				//background color 
 	int NERF_CASCADES,							//num of density grid level
 	float MIN_CONE_STEPSIZE						//lower bound of step size
 	)
@@ -84,8 +84,8 @@ __global__ void compute_rgbs_grad(
 	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
 	ENerfActivation rgb_activation,				//activation of rgb in output 
 	ENerfActivation density_activation,			//activation of density in output 
-	Array3f *__restrict__ loss_grad,			//dloss_dRGBoutput
-	Array3f *__restrict__ rgb_ray,				//RGB from forward calculation
+	RGBArray *__restrict__ loss_grad,			//dloss_dRGBoutput
+	RGBArray *__restrict__ rgb_ray,				//RGB from forward calculation
 	float *__restrict__ density_grid_mean,		//density_grid mean value,
 	int NERF_CASCADES,							//num of density grid level
 	float MIN_CONE_STEPSIZE						//lower bound of step size
@@ -159,7 +159,7 @@ __global__ void compute_rgbs_inference(
 	ENerfActivation density_activation,			//activation of density in output 
 	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
 	uint32_t *__restrict__ numsteps_in,			//rays offset and base counter
-	Array3f *__restrict__ rgb_output,						//rays rgb output
+	RGBArray *__restrict__ rgb_output,						//rays rgb output
 	int NERF_CASCADES,							//num of density grid level
 	float MIN_CONE_STEPSIZE,					//lower bound of step size
 	float* __restrict__ alpha_output
@@ -198,7 +198,7 @@ __global__ void compute_rgbs_inference(
 		const float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
 
 //compute_rgbs in float16 type
-void compute_rgbs_fp16(
+void compute_rgbs_fp16_3(
     uint32_t shmem_size,
     cudaStream_t stream,
 	const uint32_t n_rays,						//batch total rays number
@@ -209,15 +209,15 @@ void compute_rgbs_fp16(
 	ENerfActivation density_activation,			//activation of density in output 
 	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
 	uint32_t *__restrict__ numsteps_in,			//rays offset and base counter before compact
-	Array3f *rgb_output, 						//rays rgb output
+	RGBArray *rgb_output, 						//rays rgb output
 	uint32_t *__restrict__ numsteps_compacted_in,//rays offset and base counter after compact
-	const Array3f *bg_color_ptr,				//background color 
+	const RGBArray *bg_color_ptr,				//background color 
 	int NERF_CASCADES,							//num of density grid level
 	float MIN_CONE_STEPSIZE						//lower bound of step size
 	);
 
 //compute_rgbs_grad in float16 type
-void compute_rgbs_grad_fp16(
+void compute_rgbs_grad_fp16_3(
     uint32_t shmem_size,
     cudaStream_t stream,
 	const uint32_t n_rays,						//batch total rays number
@@ -229,8 +229,8 @@ void compute_rgbs_grad_fp16(
 	PitchedPtr<NerfCoordinate> coords_in,		//network input,(xyz,dt,dir)
 	ENerfActivation rgb_activation,				//activation of rgb in output 
 	ENerfActivation density_activation,			//activation of density in output 
-	Array3f *__restrict__ loss_grad,			//dloss_dRGBoutput
-	Array3f *__restrict__ rgb_ray,				//RGB from forward calculation
+	RGBArray *__restrict__ loss_grad,			//dloss_dRGBoutput
+	RGBArray *__restrict__ rgb_ray,				//RGB from forward calculation
 	float *__restrict__ density_grid_mean,		//density_grid mean value,
 	int NERF_CASCADES,							//num of density grid level
 	float MIN_CONE_STEPSIZE						//lower bound of step size
