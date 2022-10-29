@@ -70,9 +70,9 @@ def mesh():
         with jt.no_grad():
             B = xyz_.shape[0]
             out_chunks = []
-            for i in range(0, B, runner.n_rays_per_batch*128):
-                pos=xyz_[i:i + runner.n_rays_per_batch*128]
-                dir=dir_[i:i + runner.n_rays_per_batch*128]
+            for i in range(0, B, runner.n_rays_per_batch_infer*128):
+                pos=xyz_[i:i + runner.n_rays_per_batch_infer*128]
+                dir=dir_[i:i + runner.n_rays_per_batch_infer*128]
                 out_chunks += [runner.model(pos, dir)[:,-1]]
             jt.sync_all(True)
             out_chunks = jt.concat(out_chunks,0)
@@ -134,23 +134,30 @@ def mesh():
     W, H = runner.image_resolutions
     W = int(W)
     H = int(H)
-    fake_img_ids = jt.zeros([H*W], 'int32')
     N_vertices = len(vertices_)
-    img = []
-    alpha = []
-    for start in tqdm(range(0, N_vertices, runner.n_rays_per_batch)):
-        with jt.no_grad():
-            end = start + runner.n_rays_per_batch
+    fake_img_ids = jt.zeros([N_vertices], 'int32')
+    img = np.empty([N_vertices+runner.n_rays_per_batch_infer, 3])
+    alpha = np.empty([N_vertices+runner.n_rays_per_batch_infer, 1])
+    with jt.no_grad():
+        for start in tqdm(range(0, N_vertices, runner.n_rays_per_batch_infer)):
+            end = start + runner.n_rays_per_batch_infer
             rays_o = rays_o_total[start:end]
             rays_d = dir_[start:end]
+            if end > N_vertices:
+                rays_o = jt.concat(
+                    [rays_o, jt.ones([end-N_vertices]+rays_o.shape[1:], rays_o.dtype)], dim=0)
+                rays_d = jt.concat(
+                    [rays_d, jt.ones([end-N_vertices]+rays_d.shape[1:], rays_d.dtype)], dim=0)
             pos, dir = runner.sampler.sample(fake_img_ids, rays_o, rays_d)
             network_outputs = runner.model(pos, dir)
-            rgb, a = runner.sampler.rays2rgb(network_outputs, inference=True)
-            img += [rgb.numpy()]
-            alpha += [a.numpy()]
+            rgbs, a = runner.sampler.rays2rgb(network_outputs, inference=True)
+            rgb = rgbs[..., :3]
+            img[start:end] = rgb.numpy()
+            alpha[start:end] = a.numpy()
+            jt.sync_all()
             jt.gc()
-    img = np.concatenate(img, 0)
-    alpha = np.concatenate(alpha, 0)
+    img = img[:N_vertices]
+    alpha = alpha[:N_vertices]
     img = img + np.array(runner.background_color)*(1 - alpha)
     img = (img*255+0.5).clip(0, 255).astype('uint8')
     img.dtype = [('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]

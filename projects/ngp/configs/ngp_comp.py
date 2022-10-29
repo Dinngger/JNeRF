@@ -37,7 +37,7 @@ expdecay=dict(
     decay_end=None
 )
 
-exp_name = "Car"
+exp_name = "Easyship"
 dataset_type = 'NerfDataset'
 dataset_dir = 'data/fixed/'+exp_name
 dataset_aabb = {"Car":4, "Coffee":1, "Easyship":2, "Scar":5, "Scarf":8}

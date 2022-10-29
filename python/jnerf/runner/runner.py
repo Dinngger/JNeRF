@@ -65,9 +65,6 @@ class Runner():
         self.save_path=os.path.join(self.cfg.log_dir, self.exp_name)
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
-        self.image_resolutions = self.dataset["train"].resolution
-        self.W = self.image_resolutions[0]
-        self.H = self.image_resolutions[1]
         get_data()
         adaptive_rgb_length(self.cfg.rgb_length)
         
