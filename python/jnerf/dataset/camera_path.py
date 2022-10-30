@@ -17,9 +17,10 @@ def pose_spherical(theta, phi, radius):
         [0,1,0,0],
         [np.sin(th),0, np.cos(th),0],
         [0,0,0,1]]).astype(np.float32))
-    c2w = trans_t(radius)
-    c2w = rot_phi(phi/180.*np.pi) @ c2w
-    c2w = rot_theta(theta/180.*np.pi) @ c2w
+    c2w = trans_t(radius) @ jt.array(np.array([[0,1,0,0],[1,0,0,0],[0,0,-1,0],[0,0,0,1]]))
+    c2w = rot_theta(phi/180.*np.pi) @ c2w
+    c2w = rot_phi(theta/180.*np.pi) @ c2w
+    c2w = trans_t(0.9) @ c2w
     c2w = jt.array(np.array([[-1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])) @ c2w
     c2w = c2w[:-1, :]
     return c2w

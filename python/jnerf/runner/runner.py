@@ -130,6 +130,14 @@ class Runner():
             print("TOTAL TEST PSNR===={}".format(tot_psnr/len(mse_list)))
 
     def render(self, load_ckpt=True, save_path=None):
+        if self.dataset["test"] is None:
+            self.dataset["test"] = build_from_cfg(self.cfg.dataset.test, DATASETS)
+            if self.cfg.dataset_obj is None:
+                self.cfg.dataset_obj = self.dataset["test"]
+                self.build_model()
+            self.image_resolutions = self.dataset["test"].resolution
+            self.W = self.image_resolutions[0]
+            self.H = self.image_resolutions[1]
         if load_ckpt:
             assert os.path.exists(self.ckpt_path), "ckpt file does not exist: "+self.ckpt_path
             self.load_ckpt(self.ckpt_path)
@@ -138,14 +146,14 @@ class Runner():
         else:
             assert save_path.endswith(".mp4"), "suffix of save_path need to be .mp4"
         print("rendering video with specified camera path")
-        fps = 28
+        fps = 24
         W, H = self.image_resolutions
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         videowriter = cv2.VideoWriter(save_path, fourcc, fps, (W, H))
-        cam_path = camera_path.path_spherical()
+        cam_path = camera_path.path_spherical(nframe=100)
         with jt.no_grad():
             for pose in tqdm(cam_path):
-                img = self.render_img_with_pose(pose)
+                img = self.render_img_with_pose(pose, dataset_mode="test")
                 img = (img*255+0.5).clip(0, 255).astype('uint8')
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 videowriter.write(img)
