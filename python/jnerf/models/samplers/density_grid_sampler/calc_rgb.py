@@ -4,69 +4,16 @@ import pathlib
 import jittor as jt
 import jnerf
 from jittor import Function, exp, log
-import jittor_utils
 import numpy as np
-from jnerf.ops.code_ops.global_vars import global_headers,proj_options,ngp_suffix,fn_mapping
-from jnerf.utils.config import get_cfg
+from jnerf.ops.code_ops.global_vars import global_headers,proj_options
 jt.flags.use_cuda = 1
-
-class LinearToSRGB(Function):
-    def execute(self, x):
-        self.save_vars = x
-        return self.inference(x)
-
-    def grad(self, gx):
-        x = self.save_vars
-        return jt.code(x.shape, x.dtype, [x, gx], cuda_src="""
-            __global__ static void linear_to_srgb_derivative(@ARGS_DEF) {
-                @PRECALC
-                for (int i=blockIdx.x; i<in0_shape0; i+=gridDim.x)
-                for (int j=threadIdx.x; j<in0_shape1; j+=blockDim.x) {
-                    float linear = @in0(i, j);
-                    float grad = @in1(i, j);
-                    if (linear < 0.0031308f) {
-                        @out(i, j) = 12.92f * grad;
-                    } else {
-                        @out(i, j) = 1.055f * 0.41666f * std::pow(linear, 0.41666f - 1.0f) * grad;
-                    }
-                }
-            }
-            int tx = min(256, in0_shape1);
-            int by = ((in0_shape1 - 1) / tx + 1);
-            int bx = in0_shape0;
-            dim3 s2(tx);
-            dim3 s1(bx, by);
-            linear_to_srgb_derivative<<<s1, s2>>>(@ARGS);
-        """)
-
-    def inference(self, x):
-        return jt.code(x.shape, x.dtype, [x], cuda_src="""
-            __global__ static void linear_to_srgb(@ARGS_DEF) {
-                @PRECALC
-                for (int i=blockIdx.x; i<in0_shape0; i+=gridDim.x)
-                for (int j=threadIdx.x; j<in0_shape1; j+=blockDim.x) {
-                    float linear = @in0(i, j);
-                    if (linear < 0.0031308f) {
-                        @out(i, j) = 12.92f * linear;
-                    } else {
-                        @out(i, j) = 1.055f * std::pow(linear, 0.41666f) - 0.055f;
-                    }
-                }
-            }
-            int tx = min(256, in0_shape1);
-            int by = ((in0_shape1 - 1) / tx + 1);
-            int bx = in0_shape0;
-            dim3 s2(tx);
-            dim3 s1(bx, by);
-            linear_to_srgb<<<s1, s2>>>(@ARGS);
-        """)
 
 class CalcRgb(Function):
     def __init__(self, density_grad_header, aabb_range=(-1.5, 2.5), n_rays_per_batch=4096, n_rays_step=1024, padded_output_width=4, bg_color=[1, 1, 1], using_fp16=False):
         self.density_grad_header = density_grad_header
         self.bg_color = bg_color
         self.aabb_range = aabb_range
-        self.rgb_length = get_cfg().rgb_length
+        self.rgb_length = 6
         self.n_rays_per_batch = n_rays_per_batch
         self.padded_output_width = padded_output_width
         self.num_elements = n_rays_per_batch*n_rays_step
@@ -74,9 +21,7 @@ class CalcRgb(Function):
         self.rgb_activation = 2
         self.density_activation = 3
         self.ray_numstep_counter = jt.zeros([2], 'int32')
-        user_jittor_path = os.path.join(jittor_utils.cache_path, "ngp_cache")
         self.code_path = pathlib.Path(__file__).parent.resolve()
-        # self.so_name = os.path.join(user_jittor_path, fn_mapping["cr"]+f"_{self.rgb_length}"+ngp_suffix)
         self.rgb_options = copy.deepcopy(proj_options)
         if using_fp16:
             self.grad_type = 'float16'
@@ -109,6 +54,7 @@ class CalcRgb(Function):
         @alias(training_background_color,in4)
         cudaStream_t stream=0;
     
+     
         const unsigned int num_elements=network_output_shape0;
         const uint32_t n_rays=rays_numsteps_shape0;
         BoundingBox m_aabb = BoundingBox(Eigen::Vector3f::Constant({self.aabb_range[0]}), Eigen::Vector3f::Constant({self.aabb_range[1]}));
@@ -143,7 +89,7 @@ class CalcRgb(Function):
 
 
         cudaStream_t stream=0;
-        calculate_rgb_grad ccg = nullptr;
+        // calculate_rgb_grad ccg = nullptr;
         // LOGir << ccg_ptr;
         // gpuErrchk(cudaMemcpyFromSymbol(&ccg, ccg_ptr, sizeof(calculate_rgb_grad)));
         cudaMemsetAsync(out0_p, 0, out0->size);
@@ -161,7 +107,7 @@ class CalcRgb(Function):
 
         dloss_doutput.compile_options=self.rgb_options
         dloss_doutput.sync()
-        return dloss_doutput, None, None, None, None, None
+        return dloss_doutput, None, None, None,None
 
     def inference(self, network_output, coords_in, rays_numsteps, density_grid_mean):
         # input
@@ -184,8 +130,8 @@ class CalcRgb(Function):
  
 
         cudaStream_t stream=0;
-        calculate_rgb cc;
-        // gpuErrchk(cudaMemcpyFromSymbol(&cc, cc_ptr, sizeof(calculate_rgb)));
+    
+     
         const unsigned int num_elements=network_output_shape0;
         const uint32_t n_rays=rays_numsteps_shape0;
         BoundingBox m_aabb = BoundingBox(Eigen::Vector3f::Constant({self.aabb_range[0]}), Eigen::Vector3f::Constant({self.aabb_range[1]}));

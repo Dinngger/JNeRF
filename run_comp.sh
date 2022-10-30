@@ -25,5 +25,5 @@ unset LD_LIBRARY_PATH
 # export log_v=1
 # export trace_py_var=3
 # python3 tools/run_net.py --config-file ./projects/ngp/configs/ngp_comp.py --task gui
-python3 tools/extract_mesh.py --config-file ./projects/ngp/configs/ngp_comp.py --resolution 1024
+python3 tools/extract_mesh.py --config-file ./projects/ngp/configs/ngp_comp.py --resolution 512
 # "train","test","B_test","render","val_all","gui"

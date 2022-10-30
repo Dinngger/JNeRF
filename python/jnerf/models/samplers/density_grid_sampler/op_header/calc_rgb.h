@@ -29,7 +29,7 @@ __global__ void compute_rgbs(
 	{
 		return;
 	}
-	Array3f background_color=bg_color_ptr[i];
+	RGBArray background_color=bg_color_ptr[i];
 	uint32_t numsteps = numsteps_compacted_in[i * 2 + 0];
 	uint32_t base = numsteps_compacted_in[i * 2 + 1];
 	if (numsteps == 0)
@@ -44,17 +44,17 @@ __global__ void compute_rgbs(
 
 	float EPSILON = 1e-4f;
 
-	Array3f rgb_ray = Array3f::Zero();
+	RGBArray rgb_ray = RGBArray::Zero();
 
 	uint32_t compacted_numsteps = 0;
 	for (; compacted_numsteps < numsteps; ++compacted_numsteps)
 	{
-		const vector_t<TYPE, 4> local_network_output = *(vector_t<TYPE, 4> *)network_output;
-		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
+		const vector_t<TYPE, 7> local_network_output = *(vector_t<TYPE, 7> *)network_output;
+		const RGBArray rgb = network_to_rgb(local_network_output, rgb_activation);
 		const Vector3f pos = unwarp_position(coords_in.ptr->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
 
-		float density = network_to_density(float(local_network_output[3]), density_activation);
+		float density = network_to_density(float(local_network_output[6]), density_activation);
 
 		const float alpha = 1.f - __expf(-density * dt);
 		const float beta = 1.f - __expf(-100.f*dt);
@@ -115,14 +115,14 @@ __global__ void compute_rgbs_grad(
 
 	float T = 1.f;
 	uint32_t compacted_numsteps = 0;
-	Array3f rgb_ray2 = Array3f::Zero();
+	RGBArray rgb_ray2 = RGBArray::Zero();
 	for (; compacted_numsteps < numsteps; ++compacted_numsteps)
 	{
 		
-		const vector_t<TYPE, 4> local_network_output = *(vector_t<TYPE, 4> *)network_output;
-		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
+		const vector_t<TYPE, 7> local_network_output = *(vector_t<TYPE, 7> *)network_output;
+		const RGBArray rgb = network_to_rgb(local_network_output, rgb_activation);
 		float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
-		float density = network_to_density(float(local_network_output[3]), density_activation);
+		float density = network_to_density(float(local_network_output[6]), density_activation);
 
 		const RGBArray suffix;
 		const RGBArray dloss_by_drgb;
@@ -139,17 +139,20 @@ __global__ void compute_rgbs_grad(
 		dloss_by_drgb.block<3, 1>(0, 0) = (*loss_grad).block<3, 1>(0, 0) * T_alpha;
 		dloss_by_drgb.block<3, 1>(3, 0) = (*loss_grad).block<3, 1>(0, 0) * T_beta;
 
-		vector_t<TYPE, 4> local_dL_doutput;
+		vector_t<TYPE, 7> local_dL_doutput;
 
 		// chain rule to go from dloss/drgb to dloss/dmlp_output
-		local_dL_doutput[0] = loss_scale * (dloss_by_drgb.x() * network_to_rgb_derivative(local_network_output[0], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[0])); // Penalize way too large color values
-		local_dL_doutput[1] = loss_scale * (dloss_by_drgb.y() * network_to_rgb_derivative(local_network_output[1], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[1]));
-		local_dL_doutput[2] = loss_scale * (dloss_by_drgb.z() * network_to_rgb_derivative(local_network_output[2], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[2]));
+		local_dL_doutput[0] = loss_scale * (dloss_by_drgb[0] * network_to_rgb_derivative(local_network_output[0], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[0])); // Penalize way too large color values
+		local_dL_doutput[1] = loss_scale * (dloss_by_drgb[1] * network_to_rgb_derivative(local_network_output[1], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[1]));
+		local_dL_doutput[2] = loss_scale * (dloss_by_drgb[2] * network_to_rgb_derivative(local_network_output[2], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[2]));
+		local_dL_doutput[3] = loss_scale * (dloss_by_drgb[3] * network_to_rgb_derivative(local_network_output[3], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[3]));
+		local_dL_doutput[4] = loss_scale * (dloss_by_drgb[4] * network_to_rgb_derivative(local_network_output[4], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[4]));
+		local_dL_doutput[5] = loss_scale * (dloss_by_drgb[5] * network_to_rgb_derivative(local_network_output[5], rgb_activation) + fmaxf(0.0f, output_l2_reg * (float)local_network_output[5]));
 
-		float density_derivative = network_to_density_derivative(float(local_network_output[3]), density_activation);
+		float density_derivative = network_to_density_derivative(float(local_network_output[6]), density_activation);
 		float dloss_by_dmlp = density_derivative * (dt * (*loss_grad).matrix().dot((T * rgb - suffix).matrix()));
-		local_dL_doutput[3] = loss_scale * dloss_by_dmlp + (float(local_network_output[3]) < 0 ? -output_l1_reg_density : 0.0f);
-		*(vector_t<TYPE, 4> *)dloss_doutput = local_dL_doutput;
+		local_dL_doutput[6] = loss_scale * dloss_by_dmlp + (float(local_network_output[6]) < 0 ? -output_l1_reg_density : 0.0f);
+		*(vector_t<TYPE, 7> *)dloss_doutput = local_dL_doutput;
 
 		network_output += padded_output_width;
 		dloss_doutput += padded_output_width;
@@ -163,7 +166,7 @@ __global__ void compute_rgbs_inference(
 	const uint32_t n_rays,						//batch total rays number
 	BoundingBox aabb,							//boundingbox range
 	int padded_output_width,					//network output width
-	Array3f background_color,					//background color
+	RGBArray background_color,					//background color
 	const TYPE *network_output,					//network output
 	ENerfActivation rgb_activation,				//activation of rgb in output 
 	ENerfActivation density_activation,			//activation of density in output 
@@ -186,7 +189,7 @@ __global__ void compute_rgbs_inference(
 	uint32_t base = numsteps_in[i * 2 + 1];
 	if (numsteps == 0)
 	{
-		rgb_output[i] = Array3f::Zero();
+		rgb_output[i] = RGBArray::Zero();
 		alpha_output[i] = 0;
 		return;
 	}
@@ -197,12 +200,28 @@ __global__ void compute_rgbs_inference(
 
 	float EPSILON = 1e-4f;
 
-	Array3f rgb_ray = Array3f::Zero();
+	RGBArray rgb_ray = RGBArray::Zero();
 
 	uint32_t compacted_numsteps = 0;
 	for (; compacted_numsteps < numsteps; ++compacted_numsteps)
 	{
-		const vector_t<TYPE, 4> local_network_output = *(vector_t<TYPE, 4> *)network_output;
-		const Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
+		const vector_t<TYPE, 7> local_network_output = *(vector_t<TYPE, 7> *)network_output;
+		const RGBArray rgb = network_to_rgb(local_network_output, rgb_activation);
 		const Vector3f pos = unwarp_position(coords_in.ptr->pos.p, aabb);
 		const float dt = unwarp_dt(coords_in.ptr->dt, NERF_CASCADES, MIN_CONE_STEPSIZE);
+
+		float density = network_to_density(float(local_network_output[6]), density_activation);
+
+		const float alpha = 1.f - __expf(-density * dt);
+		const float beta = 1.f - __expf(-100.f*dt);
+		const Array<float, 3, 1> rgb_d = rgb.block<3, 1>(0, 0);
+		const Array<float, 3, 1> rgb_s = rgb.block<3, 1>(3, 0);
+		rgb_ray.block<3, 1>(0, 0) += (rgb_d * alpha + rgb_s * beta) * T;
+		T *= (1.f - alpha);
+
+		network_output += padded_output_width;
+		coords_in += 1;
+	}
+	rgb_output[i] = rgb_ray;
+	alpha_output[i] = 1-T;
+}
